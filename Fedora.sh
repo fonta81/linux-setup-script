@@ -111,7 +111,7 @@ ensure_flatpak() {
 # 3. Instalar Zsh y Oh My Zsh
 install_zsh_ohmyzsh() {
   header "Instalando Zsh y Oh My Zsh"
-  
+
   info "Instalando Zsh..."
   if dnf install -y zsh; then
     # Cambiar shell por defecto para el usuario real
@@ -126,7 +126,7 @@ install_zsh_ohmyzsh() {
     res_zsh="Error"
     return 1
   fi
-  
+
   # Instalar Oh My Zsh
   if [ -d "$REAL_HOME/.oh-my-zsh" ]; then
     warn "Oh My Zsh ya parece estar instalado en $REAL_HOME/.oh-my-zsh."
@@ -167,7 +167,7 @@ install_neovim_lazyvim() {
     res_neovim="Error"
     return 1
   fi
-  
+
   if [ -d "$REAL_HOME/.config/nvim" ]; then
     warn "Ya existe un directorio de configuración en $REAL_HOME/.config/nvim."
     echo -en "¿Deseas respaldar la configuración actual y clonar LazyVim? [s/N]: "
@@ -188,7 +188,7 @@ install_neovim_lazyvim() {
       return 0
     fi
   fi
-  
+
   info "Clonando la plantilla starter de LazyVim..."
   if run_as_user git clone https://github.com/LazyVim/starter "$REAL_HOME/.config/nvim"; then
     run_as_user rm -rf "$REAL_HOME/.config/nvim/.git"
@@ -220,10 +220,14 @@ install_pokemon_colorscripts() {
   header "Instalando Pokemon Colorscripts"
   local temp_dir="/tmp/pokemon-colorscripts"
   rm -rf "$temp_dir"
-  
+
   info "Clonando repositorio..."
   if run_as_user git clone https://gitlab.com/phoneybadger/pokemon-colorscripts.git "$temp_dir"; then
-    cd "$temp_dir" || { error "No se pudo ingresar al directorio temporal."; res_pokemon="Error"; return 1; }
+    cd "$temp_dir" || {
+      error "No se pudo ingresar al directorio temporal."
+      res_pokemon="Error"
+      return 1
+    }
     info "Ejecutando script de instalación como root..."
     if ./install.sh; then
       success "Pokemon Colorscripts instalado correctamente."
@@ -232,7 +236,7 @@ install_pokemon_colorscripts() {
       error "Error al ejecutar el instalador de pokemon-colorscripts."
       res_pokemon="Error"
     fi
-    cd - > /dev/null || true
+    cd - >/dev/null || true
     rm -rf "$temp_dir"
   else
     error "Error al clonar el repositorio de pokemon-colorscripts."
@@ -250,15 +254,15 @@ install_gemini_copilot() {
     res_gemini="Error"
     return 1
   fi
-  
+
   info "Configurando el prefijo de npm global para evitar el uso de sudo..."
   run_as_user mkdir -p "$REAL_HOME/.npm-global"
   run_as_user npm config set prefix "$REAL_HOME/.npm-global"
-  
+
   # Asegurar existencia de .zshrc y .bashrc
   [ ! -f "$REAL_HOME/.zshrc" ] && run_as_user touch "$REAL_HOME/.zshrc"
   [ ! -f "$REAL_HOME/.bashrc" ] && run_as_user touch "$REAL_HOME/.bashrc"
-  
+
   info "Configurando variables de entorno en .zshrc..."
   if ! run_as_user grep -q '\.npm-global/bin' "$REAL_HOME/.zshrc" 2>/dev/null; then
     run_as_user bash -c "echo 'export PATH=\"\$HOME/.npm-global/bin:\$PATH\"' >> '$REAL_HOME/.zshrc'"
@@ -274,7 +278,7 @@ install_gemini_copilot() {
   else
     info "El PATH ya estaba configurado en .bashrc."
   fi
-  
+
   info "Instalando @google/gemini-cli globalmente..."
   if run_as_user npm install -g @google/gemini-cli; then
     success "Gemini Copilot se ha instalado correctamente."
@@ -304,7 +308,7 @@ install_brave() {
 install_spotify() {
   header "Instalando Spotify (Flatpak)"
   ensure_flatpak
-  
+
   if flatpak install -y flathub com.spotify.Client; then
     success "Spotify instalado correctamente via Flatpak."
     res_spotify="Éxito"
@@ -319,7 +323,7 @@ install_spotify() {
 install_obsidian() {
   header "Instalando Obsidian (Flatpak)"
   ensure_flatpak
-  
+
   if flatpak install -y flathub md.obsidian.Obsidian; then
     success "Obsidian instalado correctamente via Flatpak."
     res_obsidian="Éxito"
@@ -338,83 +342,83 @@ install_obsidian() {
 check_status() {
   local tool="$1"
   case "$tool" in
-    update)
-      echo -e "${BLUE}Listo para verificar/actualizar${NC}"
-      ;;
-    flatpak)
-      if command -v flatpak >/dev/null 2>&1 && flatpak remote-list 2>/dev/null | grep -q "flathub" 2>/dev/null; then
-        echo -e "${GREEN}Configurado${NC}"
-      else
-        echo -e "${RED}No configurado${NC}"
-      fi
-      ;;
-    zsh)
-      if command -v zsh >/dev/null 2>&1 && [ -d "$REAL_HOME/.oh-my-zsh" ]; then
-        echo -e "${GREEN}Instalado (con Oh My Zsh)${NC}"
-      elif command -v zsh >/dev/null 2>&1; then
-        echo -e "${YELLOW}Solo Zsh (sin Oh My Zsh)${NC}"
-      else
-        echo -e "${RED}No instalado${NC}"
-      fi
-      ;;
-    yazi)
-      if command -v yazi >/dev/null 2>&1; then
-        echo -e "${GREEN}Instalado${NC}"
-      else
-        echo -e "${RED}No instalado${NC}"
-      fi
-      ;;
-    neovim)
-      if command -v nvim >/dev/null 2>&1 && [ -d "$REAL_HOME/.config/nvim" ]; then
-        echo -e "${GREEN}Instalado (con LazyVim)${NC}"
-      elif command -v nvim >/dev/null 2>&1; then
-        echo -e "${YELLOW}Solo Neovim (sin LazyVim)${NC}"
-      else
-        echo -e "${RED}No instalado${NC}"
-      fi
-      ;;
-    lazygit)
-      if command -v lazygit >/dev/null 2>&1; then
-        echo -e "${GREEN}Instalado${NC}"
-      else
-        echo -e "${RED}No instalado${NC}"
-      fi
-      ;;
-    pokemon)
-      if command -v pokemon-colorscripts >/dev/null 2>&1 || [ -f "/usr/local/bin/pokemon-colorscripts" ]; then
-        echo -e "${GREEN}Instalado${NC}"
-      else
-        echo -e "${RED}No instalado${NC}"
-      fi
-      ;;
-    gemini)
-      if [ -f "$REAL_HOME/.npm-global/bin/gemini" ] || command -v gemini >/dev/null 2>&1; then
-        echo -e "${GREEN}Instalado${NC}"
-      else
-        echo -e "${RED}No instalado${NC}"
-      fi
-      ;;
-    brave)
-      if command -v brave-browser >/dev/null 2>&1; then
-        echo -e "${GREEN}Instalado${NC}"
-      else
-        echo -e "${RED}No instalado${NC}"
-      fi
-      ;;
-    spotify)
-      if command -v flatpak >/dev/null 2>&1 && flatpak list --columns=application 2>/dev/null | grep -q "com.spotify.Client" 2>/dev/null; then
-        echo -e "${GREEN}Instalado (Flatpak)${NC}"
-      else
-        echo -e "${RED}No instalado${NC}"
-      fi
-      ;;
-    obsidian)
-      if command -v flatpak >/dev/null 2>&1 && flatpak list --columns=application 2>/dev/null | grep -q "md.obsidian.Obsidian" 2>/dev/null; then
-        echo -e "${GREEN}Instalado (Flatpak)${NC}"
-      else
-        echo -e "${RED}No instalado${NC}"
-      fi
-      ;;
+  update)
+    echo -e "${BLUE}Listo para verificar/actualizar${NC}"
+    ;;
+  flatpak)
+    if command -v flatpak >/dev/null 2>&1 && flatpak remote-list 2>/dev/null | grep -q "flathub" 2>/dev/null; then
+      echo -e "${GREEN}Configurado${NC}"
+    else
+      echo -e "${RED}No configurado${NC}"
+    fi
+    ;;
+  zsh)
+    if command -v zsh >/dev/null 2>&1 && [ -d "$REAL_HOME/.oh-my-zsh" ]; then
+      echo -e "${GREEN}Instalado (con Oh My Zsh)${NC}"
+    elif command -v zsh >/dev/null 2>&1; then
+      echo -e "${YELLOW}Solo Zsh (sin Oh My Zsh)${NC}"
+    else
+      echo -e "${RED}No instalado${NC}"
+    fi
+    ;;
+  yazi)
+    if command -v yazi >/dev/null 2>&1; then
+      echo -e "${GREEN}Instalado${NC}"
+    else
+      echo -e "${RED}No instalado${NC}"
+    fi
+    ;;
+  neovim)
+    if command -v nvim >/dev/null 2>&1 && [ -d "$REAL_HOME/.config/nvim" ]; then
+      echo -e "${GREEN}Instalado (con LazyVim)${NC}"
+    elif command -v nvim >/dev/null 2>&1; then
+      echo -e "${YELLOW}Solo Neovim (sin LazyVim)${NC}"
+    else
+      echo -e "${RED}No instalado${NC}"
+    fi
+    ;;
+  lazygit)
+    if command -v lazygit >/dev/null 2>&1; then
+      echo -e "${GREEN}Instalado${NC}"
+    else
+      echo -e "${RED}No instalado${NC}"
+    fi
+    ;;
+  pokemon)
+    if command -v pokemon-colorscripts >/dev/null 2>&1 || [ -f "/usr/local/bin/pokemon-colorscripts" ]; then
+      echo -e "${GREEN}Instalado${NC}"
+    else
+      echo -e "${RED}No instalado${NC}"
+    fi
+    ;;
+  gemini)
+    if [ -f "$REAL_HOME/.npm-global/bin/gemini" ] || command -v gemini >/dev/null 2>&1; then
+      echo -e "${GREEN}Instalado${NC}"
+    else
+      echo -e "${RED}No instalado${NC}"
+    fi
+    ;;
+  brave)
+    if command -v brave-browser >/dev/null 2>&1; then
+      echo -e "${GREEN}Instalado${NC}"
+    else
+      echo -e "${RED}No instalado${NC}"
+    fi
+    ;;
+  spotify)
+    if command -v flatpak >/dev/null 2>&1 && flatpak list --columns=application 2>/dev/null | grep -q "com.spotify.Client" 2>/dev/null; then
+      echo -e "${GREEN}Instalado (Flatpak)${NC}"
+    else
+      echo -e "${RED}No instalado${NC}"
+    fi
+    ;;
+  obsidian)
+    if command -v flatpak >/dev/null 2>&1 && flatpak list --columns=application 2>/dev/null | grep -q "md.obsidian.Obsidian" 2>/dev/null; then
+      echo -e "${GREEN}Instalado (Flatpak)${NC}"
+    else
+      echo -e "${RED}No instalado${NC}"
+    fi
+    ;;
   esac
 }
 
@@ -475,7 +479,7 @@ show_summary() {
 # Ejecutar instalación automática de absolutamente todo
 install_all() {
   header "Iniciando instalación automática de todas las herramientas"
-  
+
   install_update
   install_flatpak
   install_zsh_ohmyzsh
@@ -487,7 +491,7 @@ install_all() {
   install_brave
   install_spotify
   install_obsidian
-  
+
   clear
   show_summary
 }
@@ -495,64 +499,64 @@ install_all() {
 # Selección interactiva por parte del usuario
 install_interactive() {
   header "Selección Interactiva de Herramientas"
-  
+
   local val
-  
+
   # 1. Update
   echo -en "¿Instalar Actualización de Sistema? [s/N]: "
   read -r val
   if [[ "$val" =~ ^[sS]$ ]]; then install_update; else res_update="Omitido"; fi
-  
+
   # 2. Flatpak
   echo -en "¿Instalar/Configurar Flathub? [s/N]: "
   read -r val
   if [[ "$val" =~ ^[sS]$ ]]; then install_flatpak; else res_flatpak="Omitido"; fi
-  
+
   # 3. Zsh
   echo -en "¿Instalar Zsh & Oh My Zsh? [s/N]: "
   read -r val
   if [[ "$val" =~ ^[sS]$ ]]; then install_zsh_ohmyzsh; else res_zsh="Omitido"; fi
-  
+
   # 4. Yazi
   echo -en "¿Instalar Yazi (File Manager)? [s/N]: "
   read -r val
   if [[ "$val" =~ ^[sS]$ ]]; then install_yazi; else res_yazi="Omitido"; fi
-  
+
   # 5. Neovim & LazyVim
   echo -en "¿Instalar Neovim & LazyVim? [s/N]: "
   read -r val
   if [[ "$val" =~ ^[sS]$ ]]; then install_neovim_lazyvim; else res_neovim="Omitido"; fi
-  
+
   # 6. Lazygit
   echo -en "¿Instalar Lazygit? [s/N]: "
   read -r val
   if [[ "$val" =~ ^[sS]$ ]]; then install_lazygit; else res_lazygit="Omitido"; fi
-  
+
   # 7. Pokemon Colorscripts
   echo -en "¿Instalar Pokemon Colorscripts? [s/N]: "
   read -r val
   if [[ "$val" =~ ^[sS]$ ]]; then install_pokemon_colorscripts; else res_pokemon="Omitido"; fi
-  
+
   # 8. Gemini Copilot
   echo -en "¿Instalar Gemini Copilot? [s/N]: "
   read -r val
   if [[ "$val" =~ ^[sS]$ ]]; then install_gemini_copilot; else res_gemini="Omitido"; fi
-  
+
   # 9. Brave Browser
   echo -en "¿Instalar Brave Browser? [s/N]: "
   read -r val
   if [[ "$val" =~ ^[sS]$ ]]; then install_brave; else res_brave="Omitido"; fi
-  
+
   # 10. Spotify
   echo -en "¿Instalar Spotify (Flatpak)? [s/N]: "
   read -r val
   if [[ "$val" =~ ^[sS]$ ]]; then install_spotify; else res_spotify="Omitido"; fi
-  
+
   # 11. Obsidian
   echo -en "¿Instalar Obsidian (Flatpak)? [s/N]: "
   read -r val
   if [[ "$val" =~ ^[sS]$ ]]; then install_obsidian; else res_obsidian="Omitido"; fi
-  
+
   clear
   show_summary
 }
@@ -568,9 +572,9 @@ main_menu() {
     echo -e "${CYAN}${BOLD}========================================================================${NC}"
     echo -e "Usuario real detectado: ${GREEN}${REAL_USER}${NC}"
     echo -e "Directorio de destino:  ${GREEN}${REAL_HOME}${NC}"
-    
+
     show_status_table
-    
+
     echo -e "${BOLD}Opciones de instalación:${NC}"
     echo -e "  1) Instalar ${BOLD}TODAS${NC} las herramientas automáticamente"
     echo -e "  2) Seleccionar ${BOLD}INTERACTIVAMENTE${NC} qué herramientas instalar"
@@ -578,33 +582,33 @@ main_menu() {
     echo -e "  4) Salir"
     echo
     read -p "Selecciona una opción [1-4]: " option
-    
+
     case "$option" in
-      1)
-        install_all
-        echo -en "\nPresiona [Enter] para continuar..."
-        read -r
-        ;;
-      2)
-        install_interactive
-        echo -en "\nPresiona [Enter] para continuar..."
-        read -r
-        ;;
-      3)
-        clear
-        show_status_table
-        echo -en "\nPresiona [Enter] para volver al menú..."
-        read -r
-        ;;
-      4)
-        header "Saliendo"
-        info "¡Hasta luego! Que tengas un excelente día."
-        exit 0
-        ;;
-      *)
-        error "Opción no válida. Intenta nuevamente."
-        sleep 1.5
-        ;;
+    1)
+      install_all
+      echo -en "\nPresiona [Enter] para continuar..."
+      read -r
+      ;;
+    2)
+      install_interactive
+      echo -en "\nPresiona [Enter] para continuar..."
+      read -r
+      ;;
+    3)
+      clear
+      show_status_table
+      echo -en "\nPresiona [Enter] para volver al menú..."
+      read -r
+      ;;
+    4)
+      header "Saliendo"
+      info "¡Hasta luego! Que tengas un excelente día."
+      exit 0
+      ;;
+    *)
+      error "Opción no válida. Intenta nuevamente."
+      sleep 1.5
+      ;;
     esac
   done
 }

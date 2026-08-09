@@ -1,12 +1,13 @@
+# Fedora:
 
-# inicio:
+## Parte #1:
 sudo dnf upgrade --refresh
 
-## Flatpak
+### Flatpak
 cd
 flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 
-## zsh && ohmyzsh:
+### zsh && ohmyzsh:
 cd
 dnf install zsh 
 sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
@@ -14,29 +15,29 @@ sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/too
 source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
 source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 
-## yazi:
+### yazi:
 cd
 dnf copr enable lihaohong/yazi
 dnf install yazi
 
-## nvim && lazyvim:
+### nvim && lazyvim:
 cd
 dnf install nvim
 git clone https://github.com/LazyVim/starter ~/.config/nvim
 rm -rf ~/.config/nvim/.git
 
-## lazygit:
+### lazygit:
 cd
 sudo dnf copr enable atim/lazygit -y
 sudo dnf install lazygit -y
 
-## pokemonscripts(terminal):
+### pokemonscripts(terminal):
 cd
 git clone https://gitlab.com/phoneybadger/pokemon-colorscripts.git
 cd pokemon-colorscripts
 sudo ./install.sh
 
-## gemini-copilot:
+### gemini-copilot:
 cd
 dnf install npm nodejs
 mkdir ~/.npm-global
@@ -45,14 +46,19 @@ echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.zshrc
 
 npm install -g @google/gemini-cli
 
-## Brave:
+### Brave:
 cd
 curl -fsS https://dl.brave.com/install.sh | sh
 
-## Spotify:
+### Spotify:
 cd
 flatpak install flathub com.spotify.Client
 
-## Obsidian:
+### Obsidian:
 cd
 flatpak install flathub md.obsidian.Obsidian
+
+## Parte #2:
+
+## Dank Material Shell:
+

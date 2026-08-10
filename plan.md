@@ -58,7 +58,20 @@ flatpak install flathub com.spotify.Client
 cd
 flatpak install flathub md.obsidian.Obsidian
 
-## Parte #2:
+## Parte #2(Opcional):
 
 ## Dank Material Shell:
+curl -fsSL https://install.danklinux.com | sh
 
+
+## My configs:
+git clone git@github.com:fonta81/.BackNiriDank.git ~/.config/niri/.BackNiriDank
+rm -rf ~/.config/niri && mv ~/.config/.BackNiriDank ~/.confg/niri
+
+## Config plugins ohmyzsh:
+
+sudo dnf install -y zsh-autosuggestions zsh-syntax-highlighting
+mkdir -p ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins
+ln -snf /usr/share/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions 
+ln -snf /usr/share/zsh-syntax-highlighting ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+sed -i 's/^plugins=(/plugins=(zsh-autosuggestions zsh-syntax-highlighting /' ~/.zshrc

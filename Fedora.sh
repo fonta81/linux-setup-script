@@ -69,6 +69,9 @@ res_gemini="No ejecutado"
 res_brave="No ejecutado"
 res_spotify="No ejecutado"
 res_obsidian="No ejecutado"
+res_dank="No ejecutado"
+res_configs="No ejecutado"
+res_zsh_plugins="No ejecutado"
 
 # ------------------------------------------------------------------------------
 # Funciones de Instalación para cada Herramienta
@@ -334,6 +337,71 @@ install_obsidian() {
   fi
 }
 
+# 12. Dank Material Shell
+install_dank_shell() {
+  header "Instalando Dank Material Shell"
+  if curl -fsSL https://install.danklinux.com | sh; then
+    success "Dank Material Shell instalado correctamente."
+    res_dank="Éxito"
+  else
+    error "Error al instalar Dank Material Shell."
+    res_dank="Error"
+    return 1
+  fi
+}
+
+# 13. My configs (Niri)
+install_configs() {
+  header "Aplicando configuraciones personales"
+  if run_as_user git clone git@github.com:fonta81/.BackNiriDank.git "$REAL_HOME/.config/niri/.BackNiriDank"; then
+    run_as_user rm -rf "$REAL_HOME/.config/niri" && run_as_user mv "$REAL_HOME/.config/niri/.BackNiriDank" "$REAL_HOME/.config/niri"
+    success "Configuraciones aplicadas correctamente."
+    res_configs="Éxito"
+  else
+    error "Error al aplicar configuraciones personales."
+    res_configs="Error"
+    return 1
+  fi
+}
+
+# 14. Plugins Oh My Zsh
+install_zsh_plugins() {
+  header "Configurando Plugins de Oh My Zsh"
+  
+  if ! dnf install -y zsh-autosuggestions zsh-syntax-highlighting; then
+    error "Error al instalar paquetes de plugins."
+    res_zsh_plugins="Error"
+    return 1
+  fi
+  
+  local custom_plugins_dir="${ZSH_CUSTOM:-$REAL_HOME/.oh-my-zsh/custom}/plugins"
+  run_as_user mkdir -p "$custom_plugins_dir"
+  run_as_user ln -snf /usr/share/zsh-autosuggestions "$custom_plugins_dir/zsh-autosuggestions"
+  run_as_user ln -snf /usr/share/zsh-syntax-highlighting "$custom_plugins_dir/zsh-syntax-highlighting"
+  
+  # Check and update .zshrc safely
+  for plugin in zsh-autosuggestions zsh-syntax-highlighting; do
+      if run_as_user grep -q '^plugins=(' "$REAL_HOME/.zshrc"; then
+          # Check if plugin is already in plugins=(...)
+          if ! run_as_user grep -q "plugins=.*$plugin" "$REAL_HOME/.zshrc"; then
+              # Edit plugins=(...) to add plugin safely using sed
+              run_as_user sed -i "s/^plugins=(\([^)]*\))/plugins=(\1 $plugin)/" "$REAL_HOME/.zshrc"
+              info "Plugin $plugin añadido a .zshrc."
+          else
+              info "Plugin $plugin ya estaba en .zshrc."
+          fi
+      else
+          # Create plugins line if it doesn't exist
+          run_as_user bash -c "echo 'plugins=($plugin)' >> '$REAL_HOME/.zshrc'"
+          info "Plugins list creada en .zshrc con $plugin."
+      fi
+  done
+  
+  success "Plugins de Oh My Zsh configurados."
+  res_zsh_plugins="Éxito"
+}
+
+
 # ------------------------------------------------------------------------------
 # Funciones de Interfaz, Estados y Control
 # ------------------------------------------------------------------------------
@@ -419,6 +487,23 @@ check_status() {
       echo -e "${RED}No instalado${NC}"
     fi
     ;;
+  dank)
+    echo -e "${YELLOW}Verificación manual requerida${NC}"
+    ;;
+  configs)
+    if [ -d "$REAL_HOME/.config/niri" ]; then
+      echo -e "${GREEN}Configurado${NC}"
+    else
+      echo -e "${RED}No configurado${NC}"
+    fi
+    ;;
+  plugins)
+    if [ -d "${ZSH_CUSTOM:-$REAL_HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions" ]; then
+      echo -e "${GREEN}Configurado${NC}"
+    else
+      echo -e "${RED}No configurado${NC}"
+    fi
+    ;;
   esac
 }
 
@@ -439,6 +524,9 @@ show_status_table() {
   printf "%-35s %b\n" "9. Brave Browser" "$(check_status brave)"
   printf "%-35s %b\n" "10. Spotify (Flatpak)" "$(check_status spotify)"
   printf "%-35s %b\n" "11. Obsidian (Flatpak)" "$(check_status obsidian)"
+  printf "%-35s %b\n" "12. Dank Material Shell" "$(check_status dank)"
+  printf "%-35s %b\n" "13. Configs Niri" "$(check_status configs)"
+  printf "%-35s %b\n" "14. Plugins Zsh" "$(check_status plugins)"
   echo -e "--------------------------------------------------------\n"
 }
 
@@ -473,6 +561,9 @@ show_summary() {
   printf "%-35s %b\n" "Brave Browser" "$(format_res "$res_brave")"
   printf "%-35s %b\n" "Spotify" "$(format_res "$res_spotify")"
   printf "%-35s %b\n" "Obsidian" "$(format_res "$res_obsidian")"
+  printf "%-35s %b\n" "Dank Material Shell" "$(format_res "$res_dank")"
+  printf "%-35s %b\n" "Configs Niri" "$(format_res "$res_configs")"
+  printf "%-35s %b\n" "Plugins Zsh" "$(format_res "$res_zsh_plugins")"
   echo -e "--------------------------------------------------------\n"
 }
 
@@ -491,6 +582,9 @@ install_all() {
   install_brave
   install_spotify
   install_obsidian
+  install_dank_shell
+  install_configs
+  install_zsh_plugins
 
   clear
   show_summary
@@ -556,6 +650,21 @@ install_interactive() {
   echo -en "¿Instalar Obsidian (Flatpak)? [s/N]: "
   read -r val
   if [[ "$val" =~ ^[sS]$ ]]; then install_obsidian; else res_obsidian="Omitido"; fi
+
+  # 12. Dank Shell
+  echo -en "¿Instalar Dank Material Shell? [s/N]: "
+  read -r val
+  if [[ "$val" =~ ^[sS]$ ]]; then install_dank_shell; else res_dank="Omitido"; fi
+
+  # 13. Configs
+  echo -en "¿Aplicar configuraciones personales? [s/N]: "
+  read -r val
+  if [[ "$val" =~ ^[sS]$ ]]; then install_configs; else res_configs="Omitido"; fi
+
+  # 14. Zsh Plugins
+  echo -en "¿Configurar plugins de Oh My Zsh? [s/N]: "
+  read -r val
+  if [[ "$val" =~ ^[sS]$ ]]; then install_zsh_plugins; else res_zsh_plugins="Omitido"; fi
 
   clear
   show_summary

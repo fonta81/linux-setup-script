@@ -590,81 +590,41 @@ install_all() {
   show_summary
 }
 
+# Función auxiliar para simplificar la selección interactiva
+prompt_install() {
+  local description="$1"
+  local install_func="$2"
+  local status_var_name="$3" # Nombre de la variable como string
+
+  echo -en "¿Instalar $description? [s/N]: "
+  local val
+  read -r val
+  if [[ "$val" =~ ^[sS]$ ]]; then
+    $install_func
+  else
+    # Usamos eval para actualizar la variable de estado por su nombre
+    eval "$status_var_name='Omitido'"
+  fi
+}
+
 # Selección interactiva por parte del usuario
 install_interactive() {
   header "Selección Interactiva de Herramientas"
 
-  local val
-
-  # 1. Update
-  echo -en "¿Instalar Actualización de Sistema? [s/N]: "
-  read -r val
-  if [[ "$val" =~ ^[sS]$ ]]; then install_update; else res_update="Omitido"; fi
-
-  # 2. Flatpak
-  echo -en "¿Instalar/Configurar Flathub? [s/N]: "
-  read -r val
-  if [[ "$val" =~ ^[sS]$ ]]; then install_flatpak; else res_flatpak="Omitido"; fi
-
-  # 3. Zsh
-  echo -en "¿Instalar Zsh & Oh My Zsh? [s/N]: "
-  read -r val
-  if [[ "$val" =~ ^[sS]$ ]]; then install_zsh_ohmyzsh; else res_zsh="Omitido"; fi
-
-  # 4. Yazi
-  echo -en "¿Instalar Yazi (File Manager)? [s/N]: "
-  read -r val
-  if [[ "$val" =~ ^[sS]$ ]]; then install_yazi; else res_yazi="Omitido"; fi
-
-  # 5. Neovim & LazyVim
-  echo -en "¿Instalar Neovim & LazyVim? [s/N]: "
-  read -r val
-  if [[ "$val" =~ ^[sS]$ ]]; then install_neovim_lazyvim; else res_neovim="Omitido"; fi
-
-  # 6. Lazygit
-  echo -en "¿Instalar Lazygit? [s/N]: "
-  read -r val
-  if [[ "$val" =~ ^[sS]$ ]]; then install_lazygit; else res_lazygit="Omitido"; fi
-
-  # 7. Pokemon Colorscripts
-  echo -en "¿Instalar Pokemon Colorscripts? [s/N]: "
-  read -r val
-  if [[ "$val" =~ ^[sS]$ ]]; then install_pokemon_colorscripts; else res_pokemon="Omitido"; fi
-
-  # 8. Gemini Copilot
-  echo -en "¿Instalar Gemini Copilot? [s/N]: "
-  read -r val
-  if [[ "$val" =~ ^[sS]$ ]]; then install_gemini_copilot; else res_gemini="Omitido"; fi
-
-  # 9. Brave Browser
-  echo -en "¿Instalar Brave Browser? [s/N]: "
-  read -r val
-  if [[ "$val" =~ ^[sS]$ ]]; then install_brave; else res_brave="Omitido"; fi
-
-  # 10. Spotify
-  echo -en "¿Instalar Spotify (Flatpak)? [s/N]: "
-  read -r val
-  if [[ "$val" =~ ^[sS]$ ]]; then install_spotify; else res_spotify="Omitido"; fi
-
-  # 11. Obsidian
-  echo -en "¿Instalar Obsidian (Flatpak)? [s/N]: "
-  read -r val
-  if [[ "$val" =~ ^[sS]$ ]]; then install_obsidian; else res_obsidian="Omitido"; fi
-
-  # 12. Dank Shell
-  echo -en "¿Instalar Dank Material Shell? [s/N]: "
-  read -r val
-  if [[ "$val" =~ ^[sS]$ ]]; then install_dank_shell; else res_dank="Omitido"; fi
-
-  # 13. Configs
-  echo -en "¿Aplicar configuraciones personales? [s/N]: "
-  read -r val
-  if [[ "$val" =~ ^[sS]$ ]]; then install_configs; else res_configs="Omitido"; fi
-
-  # 14. Zsh Plugins
-  echo -en "¿Configurar plugins de Oh My Zsh? [s/N]: "
-  read -r val
-  if [[ "$val" =~ ^[sS]$ ]]; then install_zsh_plugins; else res_zsh_plugins="Omitido"; fi
+  prompt_install "Actualización de Sistema" "install_update" "res_update"
+  prompt_install "Flatpak y Flathub" "install_flatpak" "res_flatpak"
+  prompt_install "Zsh & Oh My Zsh" "install_zsh_ohmyzsh" "res_zsh"
+  prompt_install "Yazi (File Manager)" "install_yazi" "res_yazi"
+  prompt_install "Neovim & LazyVim" "install_neovim_lazyvim" "res_neovim"
+  prompt_install "Lazygit" "install_lazygit" "res_lazygit"
+  prompt_install "Pokemon Colorscripts" "install_pokemon_colorscripts" "res_pokemon"
+  prompt_install "Gemini Copilot" "install_gemini_copilot" "res_gemini"
+  prompt_install "Brave Browser" "install_brave" "res_brave"
+  prompt_install "Spotify (Flatpak)" "install_spotify" "res_spotify"
+  prompt_install "Obsidian (Flatpak)" "install_obsidian" "res_obsidian"
+  prompt_install "Dank Material Shell" "install_dank_shell" "res_dank"
+  prompt_install "Configuraciones Niri" "install_configs" "res_configs"
+  prompt_install "Plugins Zsh" "install_zsh_plugins" "res_zsh_plugins"
 
   clear
   show_summary

@@ -75,3 +75,9 @@ mkdir -p ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins
 ln -snf /usr/share/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions 
 ln -snf /usr/share/zsh-syntax-highlighting ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
 sed -i 's/^plugins=(/plugins=(zsh-autosuggestions zsh-syntax-highlighting /' ~/.zshrc
+
+## conf .zshrc
+
+mv ./.zshrc ~/
+
+

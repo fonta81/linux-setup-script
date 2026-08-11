@@ -79,5 +79,3 @@ sed -i 's/^plugins=(/plugins=(zsh-autosuggestions zsh-syntax-highlighting /' ~/.
 ## conf .zshrc
 
 mv ./.zshrc ~/
-
-

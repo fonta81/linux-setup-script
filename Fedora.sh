@@ -72,6 +72,7 @@ res_obsidian="No ejecutado"
 res_dank="No ejecutado"
 res_configs="No ejecutado"
 res_zsh_plugins="No ejecutado"
+res_zshrc="No ejecutado"
 
 # ------------------------------------------------------------------------------
 # Funciones de Instalación para cada Herramienta
@@ -401,6 +402,41 @@ install_zsh_plugins() {
   res_zsh_plugins="Éxito"
 }
 
+# 15. Configurar .zshrc personalizado
+configure_zshrc() {
+  header "Configurando archivo .zshrc personalizado"
+  
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local source_zshrc="$script_dir/.zshrc"
+
+  if [ -f "$source_zshrc" ]; then
+    if [ -f "$REAL_HOME/.zshrc" ]; then
+      local backup_zshrc="$REAL_HOME/.zshrc.bak.$(date +%F_%H-%M-%S)"
+      info "Se detectó un archivo .zshrc existente. Creando respaldo en $backup_zshrc..."
+      if run_as_user cp "$REAL_HOME/.zshrc" "$backup_zshrc"; then
+        success "Respaldo creado."
+      else
+        warn "No se pudo crear el respaldo de .zshrc. Continuando..."
+      fi
+    fi
+
+    info "Instalando el archivo .zshrc personalizado en $REAL_HOME..."
+    if run_as_user cp "$source_zshrc" "$REAL_HOME/.zshrc"; then
+      success ".zshrc configurado de manera exitosa."
+      res_zshrc="Éxito"
+    else
+      error "Error al copiar el archivo .zshrc a $REAL_HOME."
+      res_zshrc="Error"
+      return 1
+    fi
+  else
+    error "No se encontró el archivo .zshrc de origen en $source_zshrc."
+    res_zshrc="Error (No encontrado)"
+    return 1
+  fi
+}
+
 
 # ------------------------------------------------------------------------------
 # Funciones de Interfaz, Estados y Control
@@ -504,6 +540,15 @@ check_status() {
       echo -e "${RED}No configurado${NC}"
     fi
     ;;
+  zshrc)
+    if [ -f "$REAL_HOME/.zshrc" ] && grep -q "pokemon-colorscripts" "$REAL_HOME/.zshrc" 2>/dev/null; then
+      echo -e "${GREEN}Configurado${NC}"
+    elif [ -f "$REAL_HOME/.zshrc" ]; then
+      echo -e "${YELLOW}Por defecto (sin personalización)${NC}"
+    else
+      echo -e "${RED}No instalado/configurado${NC}"
+    fi
+    ;;
   esac
 }
 
@@ -527,6 +572,7 @@ show_status_table() {
   printf "%-35s %b\n" "12. Dank Material Shell" "$(check_status dank)"
   printf "%-35s %b\n" "13. Configs Niri" "$(check_status configs)"
   printf "%-35s %b\n" "14. Plugins Zsh" "$(check_status plugins)"
+  printf "%-35s %b\n" "15. Configuración .zshrc" "$(check_status zshrc)"
   echo -e "--------------------------------------------------------\n"
 }
 
@@ -564,6 +610,7 @@ show_summary() {
   printf "%-35s %b\n" "Dank Material Shell" "$(format_res "$res_dank")"
   printf "%-35s %b\n" "Configs Niri" "$(format_res "$res_configs")"
   printf "%-35s %b\n" "Plugins Zsh" "$(format_res "$res_zsh_plugins")"
+  printf "%-35s %b\n" "Config .zshrc" "$(format_res "$res_zshrc")"
   echo -e "--------------------------------------------------------\n"
 }
 
@@ -585,6 +632,7 @@ install_all() {
   install_dank_shell
   install_configs
   install_zsh_plugins
+  configure_zshrc
 
   clear
   show_summary
@@ -625,6 +673,7 @@ install_interactive() {
   prompt_install "Dank Material Shell" "install_dank_shell" "res_dank"
   prompt_install "Configuraciones Niri" "install_configs" "res_configs"
   prompt_install "Plugins Zsh" "install_zsh_plugins" "res_zsh_plugins"
+  prompt_install "Configuración .zshrc" "configure_zshrc" "res_zshrc"
 
   clear
   show_summary

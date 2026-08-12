@@ -354,7 +354,7 @@ install_dank_shell() {
 # 13. My configs (Niri)
 install_configs() {
   header "Aplicando configuraciones personales"
-  if run_as_user git clone git@github.com:fonta81/.BackNiriDank.git "$REAL_HOME/.config/niri/.BackNiriDank"; then
+  if run_as_user git clone https://github.com/fonta81/.BackNiriDank.git "$REAL_HOME/.config/niri/.BackNiriDank"; then
     run_as_user rm -rf "$REAL_HOME/.config/niri" && run_as_user mv "$REAL_HOME/.config/niri/.BackNiriDank" "$REAL_HOME/.config/niri"
     success "Configuraciones aplicadas correctamente."
     res_configs="Éxito"

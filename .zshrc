@@ -1,6 +1,7 @@
 # oh-my-zsh:
 export ZSH="$HOME/.oh-my-zsh"
 ZSH_THEME="robbyrussell"
+plugins=(git)
 source $ZSH/oh-my-zsh.sh
 # Fin oh-my-zsh
 
@@ -9,7 +10,7 @@ HISTSIZE=1000
 SAVEHIST=1000
 # End of lines configured by zsh-newuser-install
 # The following lines were added by compinstall
-zstyle :compinstall filename '/home/mteo/.zshrc'
+zstyle :compinstall filename "$HOME/.zshrc"
 
 # Pokemon:
 pokemon-colorscripts -r --no-title
@@ -43,9 +44,13 @@ export EDITOR="nvim"
 export VISUAL="nvim"
 # Fin EditorRCodigoPredeterminado
 
-# Plugin
-plugins=(git)
-source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
-source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-# Fin Plugin
+# Plugins extra (zsh-autosuggestions / zsh-syntax-highlighting).
+# Se cargan aquí en vez de vía plugins=() porque install_zsh_plugins() los
+# instala en un paso opcional aparte; el chequeo -f evita un error de zsh
+# si aún no se instalaron.
+[ -f /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh ] && \
+  source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+[ -f /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ] && \
+  source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+# Fin Plugins extra
 

@@ -27,7 +27,7 @@ require_root_and_detect_user() {
     exec sudo "$0" "$@"
   fi
 
-  if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+  if [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER:-}" != "root" ]; then
     REAL_USER="$SUDO_USER"
     REAL_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
   else

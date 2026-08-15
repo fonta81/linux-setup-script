@@ -60,6 +60,10 @@ install_yazi() {
 install_neovim_lazyvim() {
   header "Instalando Neovim y LazyVim"
   if pacman -S --noconfirm neovim; then
+    if [ -d "$REAL_HOME/.config/nvim" ]; then
+      warn "Ya existe un directorio de configuración en $REAL_HOME/.config/nvim. Respaldando..."
+      backup_if_exists "$REAL_HOME/.config/nvim"
+    fi
     run_as_user git clone https://github.com/LazyVim/starter "$REAL_HOME/.config/nvim"
     run_as_user rm -rf "$REAL_HOME/.config/nvim/.git"
     success "Neovim y LazyVim configurados."; RESULTS[neovim]="Éxito"
@@ -161,7 +165,20 @@ install_zsh_plugins() {
     run_as_user mkdir -p "$custom_dir"
     run_as_user ln -snf /usr/share/zsh/plugins/zsh-autosuggestions "$custom_dir/zsh-autosuggestions"
     run_as_user ln -snf /usr/share/zsh/plugins/zsh-syntax-highlighting "$custom_dir/zsh-syntax-highlighting"
-    run_as_user sed -i 's/^plugins=(/plugins=(zsh-autosuggestions zsh-syntax-highlighting /' "$REAL_HOME/.zshrc"
+
+    for plugin in zsh-autosuggestions zsh-syntax-highlighting; do
+      if run_as_user grep -q '^plugins=(' "$REAL_HOME/.zshrc"; then
+        if ! run_as_user grep -q "plugins=.*$plugin" "$REAL_HOME/.zshrc"; then
+          run_as_user sed -i "s/^plugins=(\([^)]*\))/plugins=(\1 $plugin)/" "$REAL_HOME/.zshrc"
+          info "Plugin $plugin añadido a .zshrc."
+        else
+          info "Plugin $plugin ya estaba en .zshrc."
+        fi
+      else
+        run_as_user bash -c "echo 'plugins=($plugin)' >> '$REAL_HOME/.zshrc'"
+        info "Plugins list creada en .zshrc con $plugin."
+      fi
+    done
     success "Plugins configurados."; RESULTS[plugins]="Éxito"
   else
     error "Error al configurar plugins."; RESULTS[plugins]="Error"; return 1

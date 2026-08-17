@@ -243,7 +243,17 @@ install_configs() {
   fi
 }
 
-# 14. Plugins Oh My Zsh
+# 14. Instalar Antigravity CLI
+install_antigravity() {
+  header "Instalando Antigravity CLI"
+  if curl -fsSL https://antigravity.google/cli/install.sh | bash; then
+    success "Antigravity CLI instalado correctamente."; RESULTS[antigravity]="Éxito"
+  else
+    error "Error al instalar Antigravity CLI."; RESULTS[antigravity]="Error"; return 1
+  fi
+}
+
+# 15. Plugins Oh My Zsh
 install_zsh_plugins() {
   header "Configurando Plugins de Oh My Zsh"
 
@@ -361,6 +371,7 @@ check_obsidian() {
 }
 
 check_dank()     { echo -e "${YELLOW}Verificación manual requerida${NC}"; }
+check_antigravity() { command -v agy >/dev/null 2>&1 && echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"; }
 check_configs()  { check_dir_exists "$REAL_HOME/.config/niri"; }
 check_plugins()  { check_dir_exists "${ZSH_CUSTOM:-$REAL_HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions"; }
 
@@ -389,6 +400,7 @@ register_tool brave    "Brave Browser"               install_brave             c
 register_tool spotify  "Spotify (Flatpak)"           install_spotify           check_spotify
 register_tool obsidian "Obsidian (Flatpak)"          install_obsidian          check_obsidian
 register_tool dank     "Dank Material Shell"         install_dank_shell        check_dank
+register_tool antigravity "Antigravity CLI"          install_antigravity       check_antigravity
 register_tool configs  "Configs Niri"                install_configs           check_configs
 register_tool plugins  "Plugins Zsh"                 install_zsh_plugins       check_plugins
 register_tool zshrc    "Configuración .zshrc"        configure_zshrc           check_zshrc

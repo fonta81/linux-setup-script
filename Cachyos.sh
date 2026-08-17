@@ -147,6 +147,15 @@ install_dank_shell() {
   fi
 }
 
+install_antigravity() {
+  header "Instalando Antigravity CLI"
+  if curl -fsSL https://antigravity.google/cli/install.sh | bash; then
+    success "Antigravity CLI instalado."; RESULTS[antigravity]="Éxito"
+  else
+    error "Error al instalar Antigravity CLI."; RESULTS[antigravity]="Error"; return 1
+  fi
+}
+
 install_configs() {
   header "Aplicando configuraciones personales"
   backup_if_exists "$REAL_HOME/.config/niri"
@@ -201,6 +210,7 @@ check_brave()    { check_command_exists brave-browser; }
 check_spotify()  { check_flatpak_app com.spotify.Client; }
 check_obsidian() { check_flatpak_app md.obsidian.Obsidian; }
 check_dank()     { echo -e "${YELLOW}Verif. manual${NC}"; }
+check_antigravity() { command -v agy >/dev/null 2>&1 && echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No${NC}"; }
 check_configs()  { check_dir_exists "$REAL_HOME/.config/niri"; }
 check_plugins()  { check_dir_exists "${ZSH_CUSTOM:-$REAL_HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions"; }
 
@@ -219,6 +229,7 @@ register_tool brave     "Brave Browser"          install_brave             check
 register_tool spotify   "Spotify"                install_spotify           check_spotify
 register_tool obsidian  "Obsidian"               install_obsidian          check_obsidian
 register_tool dank      "Dank Shell"             install_dank_shell        check_dank
+register_tool antigravity "Antigravity CLI"      install_antigravity       check_antigravity
 register_tool configs   "Configs Niri"           install_configs           check_configs
 register_tool plugins   "Plugins Zsh"            install_zsh_plugins       check_plugins
 

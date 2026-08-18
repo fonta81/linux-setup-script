@@ -99,26 +99,143 @@ backup_if_exists() {
   fi
 }
 
+# --- Funciones visuales mejoradas (barras, spinner, cajas) ---------------------
+
+# Barra de progreso animada - Uso: progress_bar "Instalando paquete" 5
+progress_bar() {
+  local label="$1"
+  local seconds="${2:-3}"
+  local width=30
+  local iterations=$((seconds * 4))
+  
+  printf "%s " "$label"
+  for ((i = 0; i < iterations; i++)); do
+    local percent=$((i * 100 / iterations))
+    local filled=$((percent * width / 100))
+    local empty=$((width - filled))
+    
+    printf "\r%s [" "$label"
+    printf "%${filled}s" | tr ' ' '='
+    printf "%${empty}s" | tr ' ' '-'
+    printf "] %d%%" "$percent"
+    sleep 0.25
+  done
+  printf "\r%s [" "$label"
+  printf "%${width}s" | tr ' ' '='
+  printf "] 100%%\n"
+}
+
+# Spinner animado - Uso: run_with_spinner "comando" "Mensaje"
+run_with_spinner() {
+  local cmd="$1"
+  local msg="${2:-Procesando}"
+  local spinners=( '⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏' )
+  local i=0
+  
+  # Ejecutar comando en background
+  eval "$cmd" &
+  local pid=$!
+  
+  while kill -0 $pid 2>/dev/null; do
+    printf "\r${CYAN}${spinners[$i]}${NC} $msg"
+    i=$(( (i + 1) % ${#spinners[@]} ))
+    sleep 0.1
+  done
+  
+  wait $pid
+  local exit_code=$?
+  printf "\r${GREEN}✓${NC} $msg\n"
+  return $exit_code
+}
+
+# Dibujar una caja/panel - Uso: draw_box "Título" "Contenido línea 1" "Contenido línea 2"
+draw_box() {
+  local title="$1"
+  shift
+  local lines=("$@")
+  local max_width=0
+  
+  # Encontrar ancho máximo
+  max_width=${#title}
+  for line in "${lines[@]}"; do
+    if [ ${#line} -gt $max_width ]; then
+      max_width=${#line}
+    fi
+  done
+  max_width=$((max_width + 4))
+  
+  # Dibujar caja
+  printf "┌─"
+  printf '─%.0s' $(seq 1 $max_width)
+  printf "─┐\n"
+  
+  if [ -n "$title" ]; then
+    printf "│ ${BOLD}%-${max_width}s${NC} │\n" "$title"
+    printf "├─"
+    printf '─%.0s' $(seq 1 $max_width)
+    printf "─┤\n"
+  fi
+  
+  for line in "${lines[@]}"; do
+    printf "│ %-${max_width}s │\n" "$line"
+  done
+  
+  printf "└─"
+  printf '─%.0s' $(seq 1 $max_width)
+  printf "─┘\n"
+}
+
 # --- UI genérica ------------------------------------------------------------
 show_status_table() {
-  echo -e "\n${BOLD}Estado de las herramientas:${NC}"
-  echo -e "--------------------------------------------------------"
-  printf "%-35s %-25s\n" "Herramienta" "Estado"
-  echo -e "--------------------------------------------------------"
+  echo -e "\n${BOLD}${CYAN}Estado de las Herramientas${NC}"
+  echo -e "${CYAN}╔════════════════════════════════════════════════════════════════╗${NC}"
+  printf "${CYAN}║${NC} %-60s ${CYAN}║${NC}\n" "# | Herramienta | Estado"
+  echo -e "${CYAN}╠════════════════════════════════════════════════════════════════╣${NC}"
+  
   local i=1
   for id in "${TOOL_ORDER[@]}"; do
     local check_fn="${TOOL_CHECK_FN[$id]}"
-    printf "%-35s %b\n" "$i. ${TOOL_LABEL[$id]}" "$($check_fn)"
+    local status_text="$($check_fn)"
+    local label="${TOOL_LABEL[$id]}"
+    
+    # Truncar label si es muy largo
+    if [ ${#label} -gt 35 ]; then
+      label="${label:0:32}..."
+    fi
+    
+    printf "${CYAN}║${NC} %2d ${BOLD}%-35s${NC} %b ${CYAN}║${NC}\n" "$i" "$label" "$status_text"
     i=$((i + 1))
   done
-  echo -e "--------------------------------------------------------\n"
+  echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}\n"
 }
 
 show_summary() {
-  header "Resumen de Operaciones"
+  clear
+  echo ""
+  echo -e "${BOLD}${CYAN}╔════════════════════════════════════════════════════════════════╗${NC}"
+  echo -e "${CYAN}║${NC} ${BOLD}Resumen de Operaciones${NC}" 
+  echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}"
+  echo ""
+  
   for id in "${TOOL_ORDER[@]}"; do
-    printf "%-35s %b\n" "${TOOL_LABEL[$id]}:" "$(format_res "${RESULTS[$id]}")"
+    local label="${TOOL_LABEL[$id]}"
+    local result="${RESULTS[$id]}"
+    local formatted_res="$(format_res "$result")"
+    
+    # Determinar ícono según resultado
+    local icon=""
+    case "$result" in
+      Éxito)              icon="${GREEN}✓${NC}" ;;
+      Error)              icon="${RED}✗${NC}" ;;
+      "Éxito (Ya existía)") icon="${YELLOW}◐${NC}" ;;
+      Omitido)            icon="${BLUE}◌${NC}" ;;
+      *)                  icon="${BLUE}○${NC}" ;;
+    esac
+    
+    printf "  $icon %-38s : %b\n" "$label" "$formatted_res"
   done
+  
+  echo ""
 }
 
 install_all() {
@@ -141,18 +258,84 @@ install_interactive() {
   clear; show_summary
 }
 
+# Menú interactivo con navegación por flechas (fallback a números)
+interactive_main_menu() {
+  local title="$1"
+  local options=("Todo automático" "Interactivo" "Estado" "Salir")
+  local selected=0
+  
+  while true; do
+    clear
+    echo -e "${CYAN}${BOLD}╔════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║${NC}  $title"
+    echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    
+    show_status_table
+    
+    echo -e "${BOLD}Opciones:${NC}"
+    for i in "${!options[@]}"; do
+      if [ "$i" -eq "$selected" ]; then
+        echo -e "  ${CYAN}${BOLD}➤ $((i+1)). ${options[$i]}${NC}"
+      else
+        echo -e "    $((i+1)). ${options[$i]}"
+      fi
+    done
+    
+    echo ""
+    echo -e "${BOLD}Usa ↑/↓ para navegar, Enter para seleccionar, o escribe número (1-4):${NC}"
+    
+    # Leer input - soportar flechas y números
+    read -rsn 1 input
+    
+    if [[ "$input" == "" ]]; then
+      read -rsn 2 input  # Leer secuencia de flecha
+    fi
+    
+    case "$input" in
+      A) selected=$(( (selected - 1 + ${#options[@]}) % ${#options[@]} )) ;;
+      B) selected=$(( (selected + 1) % ${#options[@]} )) ;;
+      1) selected=0 ;;
+      2) selected=1 ;;
+      3) selected=2 ;;
+      4) selected=3 ;;
+      "") # Enter presionado
+        case $selected in
+          0) install_all; read -p "Presiona Enter para continuar..." ;;
+          1) install_interactive; read -p "Presiona Enter para continuar..." ;;
+          2) show_status_table; read -p "Presiona Enter para continuar..." ;;
+          3) exit 0 ;;
+        esac
+        ;;
+    esac
+  done
+}
+
 main_menu() {
   local title="$1"
   while true; do
-    clear; echo -e "${CYAN}${BOLD}=== $title ===${NC}\n"
+    clear
+    echo -e "${CYAN}${BOLD}╔════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║${NC}  $title"
+    echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    
     show_status_table
-    echo -e "1) Todo automático\n2) Interactivo\n3) Estado\n4) Salir"
-    read -p "Opción: " opt
+    
+    echo -e "${BOLD}Opciones:${NC}"
+    echo -e "  1) ${BOLD}Todo automático${NC}"
+    echo -e "  2) ${BOLD}Interactivo${NC}"
+    echo -e "  3) ${BOLD}Estado${NC}"
+    echo -e "  4) ${BOLD}Salir${NC}"
+    echo ""
+    
+    read -p "${BOLD}Opción (1-4):${NC} " opt
     case $opt in
-      1) install_all; read ;;
-      2) install_interactive; read ;;
-      3) show_status_table; read ;;
+      1) install_all; read -p "Presiona Enter para continuar..." ;;
+      2) install_interactive; read -p "Presiona Enter para continuar..." ;;
+      3) show_status_table; read -p "Presiona Enter para continuar..." ;;
       4) exit 0 ;;
+      *) warn "Opción inválida. Intenta de nuevo." ;;
     esac
   done
 }

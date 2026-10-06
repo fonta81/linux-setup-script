@@ -391,7 +391,7 @@ run_on_distro() {
 # 1. Actualizar el sistema
 install_update() {
   header "Actualizando el sistema $DISTRO"
-  if run_on_distro "dnf upgrade -y" "pacman -Syu --noconfirm"; then
+  if run_on_distro "dnf upgrade --refresh -y" "pacman -Syu --noconfirm"; then
     success "Sistema actualizado correctamente."; RESULTS[update]="Éxito"
   else
     error "Error al actualizar el sistema."; RESULTS[update]="Error"; return 1
@@ -677,9 +677,9 @@ install_zsh_plugins() {
   success "Plugins de Oh My Zsh configurados."; RESULTS[plugins]="Éxito"
 }
 
-# 16. Configurar .zshrc personalizado
+# 16. Configurar .zshrc personalizado y Ghostty
 configure_zshrc() {
-  header "Configurando archivo .zshrc personalizado"
+  header "Configurando archivo .zshrc personalizado y Ghostty"
   local source_zshrc="$SCRIPT_DIR/.zshrc"
   if [ -f "$source_zshrc" ]; then
     if [ -f "$REAL_HOME/.zshrc" ]; then
@@ -694,7 +694,7 @@ configure_zshrc() {
 
     info "Instalando el archivo .zshrc personalizado en $REAL_HOME..."
     if run_as_user cp "$source_zshrc" "$REAL_HOME/.zshrc"; then
-      success ".zshrc configurado de manera exitosa."; RESULTS[zshrc]="Éxito"
+      success ".zshrc configurado de manera exitosa."
     else
       error "Error al copiar el archivo .zshrc a $REAL_HOME."; RESULTS[zshrc]="Error"; return 1
     fi
@@ -703,6 +703,22 @@ configure_zshrc() {
     RESULTS[zshrc]="Error (No encontrado)"
     return 1
   fi
+
+  local source_ghostty="$SCRIPT_DIR/config_ghostty/config"
+  if [ -f "$source_ghostty" ]; then
+    info "Instalando configuración de Ghostty en $REAL_HOME/.config/ghostty/..."
+    run_as_user mkdir -p "$REAL_HOME/.config/ghostty"
+    backup_if_exists "$REAL_HOME/.config/ghostty/config"
+    if run_as_user cp -r "$source_ghostty" "$REAL_HOME/.config/ghostty/"; then
+      success "Configuración de Ghostty instalada."
+    else
+      warn "No se pudo instalar la configuración de Ghostty. Continuando..."
+    fi
+  else
+    warn "No se encontró el config de Ghostty en $source_ghostty. Omitiendo..."
+  fi
+
+  RESULTS[zshrc]="Éxito"
 }
 
 # --- Funciones de Verificación Unificadas ---------------------------------
@@ -785,10 +801,19 @@ check_plugins() {
 }
 
 check_zshrc() {
-  if [ -f "$REAL_HOME/.zshrc" ] && grep -q "pokemon-colorscripts" "$REAL_HOME/.zshrc" 2>/dev/null; then
+  local has_zshrc="no"
+  local has_ghostty="no"
+  [ -f "$REAL_HOME/.zshrc" ] && has_zshrc="si"
+  [ -f "$REAL_HOME/.config/ghostty/config" ] && has_ghostty="si"
+
+  if [ "$has_zshrc" = "si" ] && [ "$has_ghostty" = "si" ]; then
     echo -e "${GREEN}Configurado${NC}"
-  elif [ -f "$REAL_HOME/.zshrc" ]; then
-    echo -e "${YELLOW}Por defecto (sin personalización)${NC}"
+  elif [ "$has_zshrc" = "si" ]; then
+    if grep -q "pokemon-colorscripts" "$REAL_HOME/.zshrc" 2>/dev/null; then
+      echo -e "${YELLOW}Configurado (sin Ghostty)${NC}"
+    else
+      echo -e "${YELLOW}Por defecto (sin personalización)${NC}"
+    fi
   else
     echo -e "${RED}No instalado/configurado${NC}"
   fi

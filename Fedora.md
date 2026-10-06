@@ -1,43 +1,51 @@
-# Fedora:
+# Fedora
 
-## Parte #1:
+## Parte #1
+
 sudo dnf upgrade --refresh
 
 ### Flatpak
-cd
-flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 
-### zsh && ohmyzsh:
 cd
-dnf install zsh 
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+flatpak remote-add --if-not-exists flathub <https://dl.flathub.org/repo/flathub.flatpakrepo>
+
+### zsh && ohmyzsh
+
+cd
+dnf install zsh
+sh -c "$(curl -fsSL <https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh>)"
 
 source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
 source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 
-### yazi:
+### yazi
+
 cd
 dnf copr enable lihaohong/yazi
 dnf install yazi
 
-### nvim && lazyvim:
+### nvim && lazyvim
+
 cd
 dnf install nvim
-git clone https://github.com/LazyVim/starter ~/.config/nvim
+git clone <https://github.com/LazyVim/starter> ~/.config/nvim
 rm -rf ~/.config/nvim/.git
 
-### lazygit:
+### lazygit
+
 cd
 sudo dnf copr enable atim/lazygit -y
 sudo dnf install lazygit -y
 
-### pokemonscripts(terminal):
+### pokemonscripts(terminal)
+
 cd
-git clone https://gitlab.com/phoneybadger/pokemon-colorscripts.git
+git clone <https://gitlab.com/phoneybadger/pokemon-colorscripts.git>
 cd pokemon-colorscripts
 sudo ./install.sh
 
-### gemini-copilot:
+### gemini-copilot
+
 cd
 dnf install npm nodejs
 mkdir ~/.npm-global
@@ -46,38 +54,44 @@ echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.zshrc
 
 npm install -g @google/gemini-cli
 
-### Brave:
-cd
-curl -fsS https://dl.brave.com/install.sh | sh
+### Brave
 
-### Spotify:
+cd
+curl -fsS <https://dl.brave.com/install.sh> | sh
+
+### Spotify
+
 cd
 flatpak install flathub com.spotify.Client
 
-### Obsidian:
+### Obsidian
+
 cd
 flatpak install flathub md.obsidian.Obsidian
 
-## Parte #2(Opcional):
+## Parte #2(Opcional)
 
-## Dank Material Shell:
-curl -fsSL https://install.danklinux.com | sh
+## Dank Material Shell
 
+curl -fsSL <https://install.danklinux.com> | sh
 
-## My configs:
+## My configs
+
 # (respalda la config existente si la hay, en vez de borrarla)
+
 [ -e ~/.config/niri ] && mv ~/.config/niri ~/.config/niri.bak-$(date +%s)
-git clone git@github.com:fonta81/.BackNiriDank.git ~/.config/niri
+git clone <git@github.com>:fonta81/.BackNiriDank.git ~/.config/niri
 rm -rf ~/.config/niri/.git
 
-## Config plugins ohmyzsh:
+## Config plugins ohmyzsh
 
 sudo dnf install -y zsh-autosuggestions zsh-syntax-highlighting
 mkdir -p ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins
-ln -snf /usr/share/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions 
+ln -snf /usr/share/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
 ln -snf /usr/share/zsh-syntax-highlighting ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
 sed -i 's/^plugins=(/plugins=(zsh-autosuggestions zsh-syntax-highlighting /' ~/.zshrc
 
-## conf .zshrc
+## conf .zshrc && ghostty
 
-mv ./.zshrc ~/
+cp -r ./config_ghostty/config ~/.config/ghostty/
+cp -r ./.zshrc ~/

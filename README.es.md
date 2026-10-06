@@ -4,7 +4,7 @@ Este repositorio contiene scripts Bash interactivos guiados por menús y perfile
 
 ## Características Clave y Herramientas Instaladas
 
-Los scripts automatizan la configuración de quince (15) herramientas y características del sistema:
+Los scripts automatizan la configuración de dieciséis (16) herramientas y características del sistema:
 
 ### Categoría 1: Utilidades CLI, Shells y Editores
 1. **Actualización del Sistema**: Refresca repositorios y realiza actualizaciones del sistema.
@@ -16,14 +16,15 @@ Los scripts automatizan la configuración de quince (15) herramientas y caracter
 7. **Pokemon Colorscripts**: Despliegue de sprites Pokémon en la terminal.
 8. **Gemini Copilot**: Entorno global para Node.js y la herramienta `@google/gemini-cli`.
 9. **Plugins de Zsh**: Instalación e integración automática de `zsh-autosuggestions` y `zsh-syntax-highlighting`.
-10. **`.zshrc` Personalizado**: Aplica un perfil de Zsh optimizado con alias y variables de entorno preconfiguradas.
+10. **`.zshrc` Personalizado y Ghostty**: Aplica un perfil de Zsh optimizado con alias y variables de entorno preconfiguradas, además del config de la terminal Ghostty en `~/.config/ghostty`.
+11. **Antigravity CLI**: Instala la herramienta de línea de comandos Antigravity de Google.
 
 ### Categoría 2: Aplicaciones GUI y Configuraciones de Escritorio
-11. **Brave Browser**: Navegador web seguro.
-12. **Spotify**: Reproductor de música vía Flatpak.
-13. **Obsidian**: Gestor de notas personales vía Flatpak.
-14. **Dank Material Shell**: Script automatizado para la integración de temas y layouts.
-15. **Configuraciones de Niri**: Clona configuraciones personalizadas para el gestor de ventanas en `~/.config/niri`.
+12. **Brave Browser**: Navegador web seguro.
+13. **Spotify**: Reproductor de música vía Flatpak.
+14. **Obsidian**: Gestor de notas personales vía Flatpak.
+15. **Dank Material Shell**: Script automatizado para la integración de temas y layouts.
+16. **Configuraciones de Niri**: Clona configuraciones personalizadas para el gestor de ventanas en `~/.config/niri`.
 
 ---
 
@@ -43,7 +44,7 @@ sudo ./Cachyos.sh
 
 ### Modos de Ejecución
 Al iniciar cualquiera de los scripts, se presentará un menú interactivo con las siguientes opciones:
-1. **Todo automático:** Ejecuta secuencialmente los 15 pasos sin pausas.
+1. **Todo automático:** Ejecuta secuencialmente los 16 pasos sin pausas.
 2. **Interactivo:** Solicita confirmación `[y/N]` antes de ejecutar cada paso.
 3. **Estado:** Muestra una tabla estructurada indicando qué herramientas ya están presentes o configuradas en el sistema.
 4. **Salir:** Salida limpia del instalador.

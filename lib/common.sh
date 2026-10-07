@@ -680,7 +680,15 @@ install_zsh_plugins() {
 # 16. Configurar .zshrc personalizado y Ghostty
 configure_zshrc() {
   header "Configurando archivo .zshrc personalizado y Ghostty"
-  local source_zshrc="$SCRIPT_DIR/.zshrc"
+  local zshrc_dir
+  case "$DISTRO" in
+    fedora)  zshrc_dir="$SCRIPT_DIR/config_zsh/Fedora" ;;
+    cachyos) zshrc_dir="$SCRIPT_DIR/config_zsh/Cachyos" ;;
+    *)
+      error "Distribución desconocida ($DISTRO): no se qué .zshrc instalar."
+      RESULTS[zshrc]="Error"; return 1 ;;
+  esac
+  local source_zshrc="$zshrc_dir/.zshrc"
   if [ -f "$source_zshrc" ]; then
     if [ -f "$REAL_HOME/.zshrc" ]; then
       local backup_zshrc="$REAL_HOME/.zshrc.bak.$(date +%F_%H-%M-%S)"

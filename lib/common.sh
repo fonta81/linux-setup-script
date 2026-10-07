@@ -39,10 +39,13 @@ require_root_and_detect_user() {
 }
 
 run_as_user() {
+  local uid; uid=$(id -u "$REAL_USER")
+  local xdg=()
+  [ -d "/run/user/$uid" ] && xdg+=(XDG_RUNTIME_DIR="/run/user/$uid")
   if [ "$REAL_USER" = "root" ]; then
-    env HOME="$REAL_HOME" USER="root" "$@"
+    env HOME="$REAL_HOME" USER="root" "${xdg[@]}" "$@"
   else
-    sudo -u "$REAL_USER" env HOME="$REAL_HOME" USER="$REAL_USER" "$@"
+    sudo -u "$REAL_USER" env HOME="$REAL_HOME" USER="$REAL_USER" "${xdg[@]}" "$@"
   fi
 }
 
@@ -611,7 +614,21 @@ install_obsidian() {
 # 12. Dank Shell
 install_dank_shell() {
   header "Instalando Dank Material Shell"
-  if curl -fsSL https://install.danklinux.com | sh; then
+
+  if command -v dms >/dev/null 2>&1; then
+    warn "Dank Material Shell ya está instalado. Se omite; usa 'dms' para reconfigurar o actualizar."
+    RESULTS[dank]="Éxito (Ya existía)"; return 0
+  fi
+
+  if [ "$REAL_USER" = "root" ]; then
+    error "dankinstall se niega a ejecutarse como root y no hay un usuario real detectado."
+    RESULTS[dank]="Error"; return 1
+  fi
+
+  info "Se abrirá el instalador interactivo de Dank. Responde sus preguntas (compositor: niri/hyprland, terminal: ghostty/kitty, etc.)."
+  info "Se ejecuta como $REAL_USER; si pide una contraseña de sudo, es la tuya."
+
+  if run_as_user bash -c 'curl -fsSL https://install.danklinux.com | sh'; then
     success "Dank Material Shell instalado correctamente."; RESULTS[dank]="Éxito"
   else
     error "Error al instalar Dank Material Shell."; RESULTS[dank]="Error"; return 1
@@ -793,7 +810,11 @@ check_obsidian() {
 }
 
 check_dank() {
-  echo -e "${YELLOW}Verificación manual requerida${NC}"
+  if command -v dms >/dev/null 2>&1; then
+    echo -e "${GREEN}Instalado${NC}"
+  else
+    echo -e "${RED}No instalado${NC}"
+  fi
 }
 
 check_antigravity() {

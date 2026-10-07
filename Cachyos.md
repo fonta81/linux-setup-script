@@ -60,6 +60,8 @@ flatpak install flathub md.obsidian.Obsidian
 ## Parte #2(Opcional):
 
 ## Dank Material Shell:
+# (interactivo: te pregunta compositor -niri/hyprland- y terminal -ghostty/kitty/alacritty-;
+#  debe correr como usuario normal, nunca como root)
 curl -fsSL https://install.danklinux.com | sh
 
 

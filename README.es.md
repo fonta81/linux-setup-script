@@ -17,7 +17,7 @@ Los scripts automatizan la configuración de dieciséis (16) herramientas y cara
 9. **Brave Browser**: Navegador web seguro.
 10. **Spotify**: Reproductor de música vía Flatpak.
 11. **Obsidian**: Gestor de notas personales vía Flatpak.
-12. **Dank Material Shell**: Script automatizado para la integración de temas y layouts.
+12. **Dank Material Shell**: Script de instalación interactivo (`dankinstall`) que pregunta por el compositor (niri/hyprland) y la terminal (ghostty/kitty/alacritty) antes de configurar los motores de temas y layouts. Se omite si `dms` ya está instalado.
 13. **Antigravity CLI**: Instala la herramienta de línea de comandos Antigravity de Google.
 14. **Configuraciones de Niri**: Clona configuraciones personalizadas para el gestor de ventanas en `~/.config/niri`.
 15. **Plugins de Zsh**: Instalación e integración automática de `zsh-autosuggestions` y `zsh-syntax-highlighting`.
@@ -43,7 +43,7 @@ En Fedora, el script además instala sus prerrequisitos básicos (`git`, `curl`,
 
 ### Modos de Ejecución
 Al iniciar cualquiera de los scripts se muestra primero la tabla de estado y después un menú interactivo con las siguientes opciones:
-1. **Todo automático:** Ejecuta secuencialmente los 16 pasos sin pausas.
+1. **Todo automático:** Ejecuta secuencialmente los 16 pasos; solo el paso de Dank Material Shell se pausa, ya que abre el instalador interactivo `dankinstall` (preguntas de compositor y terminal).
 2. **Interactivo:** Solicita confirmación `[s/N]` (`s` = sí) antes de ejecutar cada paso.
 3. **Estado:** Muestra una tabla estructurada indicando qué herramientas ya están presentes o configuradas en el sistema.
 4. **Salir:** Salida limpia del instalador.

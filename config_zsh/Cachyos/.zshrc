@@ -70,8 +70,12 @@ alias pkkgen="clear && pokemon-colorscripts --no-title -n gengar"
 # niri
 alias nir="cd ~/.config/niri/"
 
-# zsh 
+# zsh
 alias nz="nvim ~/.zshrc"
+
+# CachyOs
+alias update="sudo pacman -Syu"
+
 
 # ==========================================
 # 6. INICIALIZACIÓN / STARTUP (initContent)

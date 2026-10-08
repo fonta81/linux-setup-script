@@ -500,10 +500,14 @@ install_neovim_lazyvim() {
 install_lazygit() {
   header "Instalando Lazygit"
   if [ "$DISTRO" = "fedora" ]; then
-    info "Habilitando el repositorio COPR para Lazygit..."
-    enable_copr_or_aur "atim/lazygit"
+    info "Habilitando el repositorio Terra para Lazygit..."
+    if ! dnf install -y --nogpgcheck \
+        --repofrompath "terra,https://repos.fyralabs.com/terra\$releasever" \
+        terra-release; then
+      error "Error al habilitar el repositorio Terra."; RESULTS[lazygit]="Error"; return 1
+    fi
     if ! install_package lazygit; then
-      error "Error al habilitar COPR o instalar Lazygit."; RESULTS[lazygit]="Error"; return 1
+      error "Error al instalar Lazygit."; RESULTS[lazygit]="Error"; return 1
     fi
   else
     if ! install_package lazygit; then

@@ -34,7 +34,7 @@ rm -rf ~/.config/nvim/.git
 ### lazygit
 
 cd
-sudo dnf copr enable atim/lazygit -y
+sudo dnf install --nogpgcheck --repofrompath 'terra,<https://repos.fyralabs.com/terra$releasever>' terra-release -y
 sudo dnf install lazygit -y
 
 ### pokemonscripts(terminal)
@@ -73,16 +73,18 @@ flatpak install flathub md.obsidian.Obsidian
 
 ## Dank Material Shell
 
-# (interactivo: te pregunta compositor -niri/hyprland- y terminal -ghostty/kitty/alacritty-;
-#  debe correr como usuario normal, nunca como root)
-curl -fsSL https://install.danklinux.com | sh
+# (interactivo: te pregunta compositor -niri/hyprland- y terminal -ghostty/kitty/alacritty-
+
+# debe correr como usuario normal, nunca como root)
+
+curl -fsSL <https://install.danklinux.com> | sh
 
 ## My configs
 
 # (respalda la config existente si la hay, en vez de borrarla)
 
 [ -e ~/.config/niri ] && mv ~/.config/niri ~/.config/niri.bak-$(date +%s)
-git clone git@github.com:fonta81/.BackNiriDank.git ~/.config/niri
+git clone <git@github.com>:fonta81/.BackNiriDank.git ~/.config/niri
 rm -rf ~/.config/niri/.git
 
 ## Config plugins ohmyzsh

@@ -24,7 +24,9 @@ require_root_and_detect_user() {
   if [ "$EUID" -ne 0 ]; then
     warn "Este script requiere permisos de administrador para instalar paquetes del sistema."
     info "Re-ejecutando con sudo..."
-    exec sudo "$0" "$@"
+    # Se preserva el intérprete: si se invocó como 'bash Fedora.sh', $0 solo
+    # no sería ejecutable directamente.
+    exec sudo bash "$0" "$@"
   fi
 
   if [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER:-}" != "root" ]; then
@@ -99,6 +101,7 @@ format_res() {
   local val="$1"
   case "$val" in
   Éxito) echo -e "${GREEN}$val${NC}" ;;
+  "Éxito (Ya existía)") echo -e "${YELLOW}$val${NC}" ;;
   Error) echo -e "${RED}$val${NC}" ;;
   *) echo -e "${BLUE}$val${NC}" ;;
   esac
@@ -130,8 +133,21 @@ make_tempdir() {
 
 # Clona <url> en <target> de forma atómica: primero a un temporal, luego
 # respaldo del destino y swap. Si el clon falla, la config existente no se toca.
+# Se conserva el .git del clon para permitir 'git pull' futuro.
 # Deja la ruta del respaldo en DEPLOY_BACKUP (vacío si no había nada que respaldar).
 declare -g DEPLOY_BACKUP=""
+declare -g DEPLOY_TMP=""
+declare -g DEPLOY_TARGET=""
+# Restauración ante Ctrl-C (INT/TERM) en la ventana entre el respaldo y el
+# swap final: si el destino quedó ausente, se devuelve el respaldo.
+_deploy_clone_abort() {
+  if [ -n "${DEPLOY_TMP:-}" ] && [ -d "$DEPLOY_TMP" ]; then
+    if [ -n "${DEPLOY_BACKUP:-}" ] && [ ! -e "${DEPLOY_TARGET:-/nonexistent}" ]; then
+      run_as_user mv "$DEPLOY_BACKUP" "$DEPLOY_TARGET" 2>/dev/null
+    fi
+    rm -rf "$DEPLOY_TMP" 2>/dev/null
+  fi
+}
 deploy_clone() {
   local url="$1" target="$2"
   local parent
@@ -144,13 +160,18 @@ deploy_clone() {
     return 1
   }
   inner="$tmp/$base"
+  DEPLOY_TMP="$tmp"
+  DEPLOY_TARGET="$target"
+  DEPLOY_BACKUP=""
+  trap _deploy_clone_abort INT TERM
 
   if ! run_as_user git clone "$url" "$inner"; then
     error "Error al clonar $url."
+    trap - INT TERM
     rm -rf "$tmp"
+    DEPLOY_TMP=""
     return 1
   fi
-  run_as_user rm -rf "$inner/.git"
 
   DEPLOY_BACKUP=""
   if [ -e "$target" ]; then
@@ -158,19 +179,26 @@ deploy_clone() {
     warn "Ya existe $target, se respalda en $DEPLOY_BACKUP"
     if ! run_as_user mv "$target" "$DEPLOY_BACKUP"; then
       error "No se pudo respaldar $target. No se modifica nada."
+      trap - INT TERM
       rm -rf "$tmp"
+      DEPLOY_TMP=""
+      DEPLOY_BACKUP=""
       return 1
     fi
   fi
 
   if run_as_user mv "$inner" "$target"; then
+    trap - INT TERM
     rm -rf "$tmp"
+    DEPLOY_TMP=""
     return 0
   fi
 
   error "No se pudo colocar la config nueva en $target. Restaurando el respaldo."
   [ -n "$DEPLOY_BACKUP" ] && run_as_user mv "$DEPLOY_BACKUP" "$target"
+  trap - INT TERM
   rm -rf "$tmp"
+  DEPLOY_TMP=""
   return 1
 }
 
@@ -439,19 +467,19 @@ main_menu() {
     echo -e "  4) ${BOLD}Salir${NC}"
     echo ""
 
-    read -p "${BOLD}Opción (1-4):${NC} " opt
+    read -rp "$(echo -e "${BOLD}Opción (1-4):${NC} ")" opt
     case $opt in
     1)
       install_all
-      read -p "Presiona Enter para continuar..."
+      read -rp "Presiona Enter para continuar..."
       ;;
     2)
       install_interactive
-      read -p "Presiona Enter para continuar..."
+      read -rp "Presiona Enter para continuar..."
       ;;
     3)
       show_status_table
-      read -p "Presiona Enter para continuar..."
+      read -rp "Presiona Enter para continuar..."
       ;;
     4) exit 0 ;;
     *) warn "Opción inválida. Intenta de nuevo." ;;
@@ -540,8 +568,10 @@ install_flatpak() {
       return 1
     fi
   fi
-  if flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo; then
-    success "Repositorio Flathub configurado correctamente."
+  # El remoto se registra --user como el usuario real: no ensucia /var para
+  # otros usuarios y spotify/obsidian instalan en ese mismo ámbito.
+  if run_as_user flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo; then
+    success "Repositorio Flathub configurado correctamente (--user de $REAL_USER)."
     RESULTS[flatpak]="Éxito"
   else
     error "Error al agregar el repositorio Flathub."
@@ -551,8 +581,7 @@ install_flatpak() {
 }
 
 ensure_flatpak() {
-  # Se consulta como el usuario real: como root solo se ven los remotos del
-  # sistema y el estado mentiría si Flathub se añadió --user.
+  # Se consulta como el usuario real (ámbito --user + system visibles).
   if ! run_as_user flatpak remote-list 2>/dev/null | grep -q "flathub" 2>/dev/null; then
     info "Configurando Flathub primero para dar soporte a las aplicaciones Flatpak..."
     install_flatpak
@@ -571,15 +600,17 @@ install_zsh_ohmyzsh() {
 
   if command -v chsh >/dev/null 2>&1; then
     info "Cambiando la shell predeterminada de $REAL_USER a Zsh..."
+    local zsh_bin
+    zsh_bin=$(command -v zsh 2>/dev/null)
     # chsh falla (y no avisa) si zsh no está en /etc/shells: nodea el error
-    if chsh -s "$(which zsh)" "$REAL_USER"; then
-      success "Shell predeterminada de $REAL_USER: $(which zsh)"
+    if [ -n "$zsh_bin" ] && chsh -s "$zsh_bin" "$REAL_USER"; then
+      success "Shell predeterminada de $REAL_USER: $zsh_bin"
     else
       warn "chsh no pudo cambiar la shell de $REAL_USER (probable: zsh no está en /etc/shells)."
-      warn "Cámbiala a mano con: chsh -s \$(which zsh) $REAL_USER"
+      warn "Cámbiala a mano con: chsh -s \$(command -v zsh) $REAL_USER"
     fi
   else
-    warn "No se pudo encontrar 'chsh'. Por favor cambia tu shell manualmente a Zsh usando: chsh -s \$(which zsh)"
+    warn "No se pudo encontrar 'chsh'. Por favor cambia tu shell manualmente a Zsh usando: chsh -s \$(command -v zsh)"
   fi
 
   if [ -d "$REAL_HOME/.oh-my-zsh" ]; then
@@ -587,7 +618,8 @@ install_zsh_ohmyzsh() {
     RESULTS[zsh]="Éxito (Ya existía)"
   else
     info "Instalando Oh My Zsh en modo unattended..."
-    # curl primero a una variable: si falla, sh -c "" sale 0 y daría un falso Éxito
+    # curl primero a una variable: si falla, sh sin entrada daría un falso Éxito.
+    # Se canaliza por pipe a 'sh -s' en vez de 'sh -c "$var"' (quoting/ARG_MAX).
     local omz_installer
     if ! omz_installer=$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh) ||
       [ -z "$omz_installer" ]; then
@@ -595,7 +627,7 @@ install_zsh_ohmyzsh() {
       RESULTS[zsh]="Error"
       return 1
     fi
-    if run_as_user env RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -c "$omz_installer" "" --unattended; then
+    if printf '%s\n' "$omz_installer" | run_as_user env RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -s -- --unattended; then
       success "Oh My Zsh instalado de manera exitosa."
       RESULTS[zsh]="Éxito"
     else
@@ -610,11 +642,12 @@ install_zsh_ohmyzsh() {
 install_yazi() {
   header "Instalando Yazi (File Manager de Terminal)"
   if [ "$DISTRO" = "fedora" ]; then
-    info "Habilitando el repositorio COPR para Yazi..."
     # No es fatal y va en un 'if' propio: encadenarlo con '&&' hacia el error
     # hacía que, si el COPR se habilitaba bien, install_package nunca corriera
-    # y el paso cayera en 'Éxito' sin instalar nada.
-    if ! enable_copr_or_aur "lihaohong/yazi"; then
+    # y el paso cayera en 'Éxito' sin instalar nada. Se omite si ya está activo.
+    if dnf copr list enabled 2>/dev/null | grep -q "lihaohong/yazi"; then
+      info "El COPR lihaohong/yazi ya está habilitado."
+    elif ! enable_copr_or_aur "lihaohong/yazi"; then
       warn "No se pudo habilitar el COPR lihaohong/yazi; se intenta con los repos base."
     fi
   fi
@@ -644,15 +677,16 @@ install_neovim_lazyvim() {
       return 1
     fi
     # En Fedora el binario se llama fdfind; LazyVim/mason buscan 'fd'.
-    # Se evalúa como el usuario real: nvim corre en su sesión y el enlace
-    # vive en su ~/.local/bin (que el .zshrc ya pone en el PATH).
-    if ! run_as_user bash -c 'command -v fd' >/dev/null 2>&1; then
+    # El enlace vive en su ~/.local/bin (que el .zshrc añade al PATH al final,
+    # así que solo se verifica el archivo, no 'command -v', en esta sesión).
+    if [ ! -e "$REAL_HOME/.local/bin/fd" ]; then
       local fdfind_path
       fdfind_path=$(run_as_user bash -c 'command -v fdfind' 2>/dev/null)
       if [ -n "$fdfind_path" ]; then
         run_as_user mkdir -p "$REAL_HOME/.local/bin"
         if run_as_user ln -snf "$fdfind_path" "$REAL_HOME/.local/bin/fd"; then
           info "Creado enlace ~/.local/bin/fd -> $fdfind_path para las herramientas de Neovim."
+          info "Estará en el PATH tras aplicar el paso 'Configuración .zshrc' y reabrir la terminal."
         fi
       fi
     fi
@@ -683,13 +717,19 @@ install_neovim_lazyvim() {
 install_lazygit() {
   header "Instalando Lazygit"
   if [ "$DISTRO" = "fedora" ]; then
-    info "Habilitando el repositorio Terra para Lazygit..."
-    if ! dnf install -y --nogpgcheck \
-      --repofrompath "terra-fyralabs,https://repos.fyralabs.com/terra\$releasever" \
-      terra-release; then
-      error "Error al habilitar el repositorio Terra."
-      RESULTS[lazygit]="Error"
-      return 1
+    # terra-release solo se instala si falta o si el repo terra no existe:
+    # reinstalarlo en cada corrida es lento e innecesario.
+    if rpm -q terra-release >/dev/null 2>&1 && dnf repolist enabled 2>/dev/null | grep -qi "terra"; then
+      info "El repositorio Terra ya está habilitado."
+    else
+      info "Habilitando el repositorio Terra para Lazygit..."
+      if ! dnf install -y --nogpgcheck \
+        --repofrompath "terra-fyralabs,https://repos.fyralabs.com/terra\$releasever" \
+        terra-release; then
+        error "Error al habilitar el repositorio Terra."
+        RESULTS[lazygit]="Error"
+        return 1
+      fi
     fi
     if ! install_package lazygit; then
       error "Error al instalar Lazygit."
@@ -813,10 +853,10 @@ install_brave() {
 
 # 10. Spotify
 install_spotify() {
-  header "Instalando Spotify (Flatpak)"
+  header "Instalando Spotify (Flatpak --user)"
   ensure_flatpak
-  if flatpak install -y flathub com.spotify.Client; then
-    success "Spotify instalado correctamente via Flatpak."
+  if run_as_user flatpak install --user -y flathub com.spotify.Client; then
+    success "Spotify instalado correctamente via Flatpak (--user)."
     RESULTS[spotify]="Éxito"
   else
     error "Error al instalar Spotify."
@@ -827,10 +867,10 @@ install_spotify() {
 
 # 11. Obsidian
 install_obsidian() {
-  header "Instalando Obsidian (Flatpak)"
+  header "Instalando Obsidian (Flatpak --user)"
   ensure_flatpak
-  if flatpak install -y flathub md.obsidian.Obsidian; then
-    success "Obsidian instalado correctamente via Flatpak."
+  if run_as_user flatpak install --user -y flathub md.obsidian.Obsidian; then
+    success "Obsidian instalado correctamente via Flatpak (--user)."
     RESULTS[obsidian]="Éxito"
   else
     error "Error al instalar Obsidian."
@@ -885,6 +925,19 @@ install_dank_shell() {
 # 13. Configs Niri
 install_configs() {
   header "Aplicando configuraciones personales"
+  # Este paso reemplaza ~/.config/niri, incluida la que acababa de generar
+  # dankinstall: se pide confirmación si ya existe algo.
+  if [ -e "$REAL_HOME/.config/niri" ]; then
+    warn "Esto reemplazará tu ~/.config/niri actual (se guardará un respaldo .bak-<epoch>)."
+    echo -en "¿Continuar y reemplazar la config de Niri? [s/N]: "
+    local ans
+    read -r ans
+    if [[ ! "$ans" =~ ^[sS]$ ]]; then
+      info "Paso de Niri omitido por el usuario."
+      RESULTS[configs]="Omitido"
+      return 0
+    fi
+  fi
   if deploy_clone https://github.com/fonta81/.BackNiriDank.git "$REAL_HOME/.config/niri"; then
     success "Configuraciones aplicadas correctamente."
     RESULTS[configs]="Éxito"
@@ -926,19 +979,47 @@ install_zsh_plugins() {
     return 1
   fi
 
-  # Rutas de origen según distro
+  # Rutas de origen según distro (scripts .zsh provistos por el paquete)
   if [ "$DISTRO" = "fedora" ]; then
-    local src_auto="/usr/share/zsh-autosuggestions"
-    local src_syntax="/usr/share/zsh-syntax-highlighting"
+    local src_auto="/usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
+    local src_syntax="/usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
   else
-    local src_auto="/usr/share/zsh/plugins/zsh-autosuggestions"
-    local src_syntax="/usr/share/zsh/plugins/zsh-syntax-highlighting"
+    local src_auto="/usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"
+    local src_syntax="/usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
   fi
 
   local custom_plugins_dir="${ZSH_CUSTOM:-$REAL_HOME/.oh-my-zsh/custom}/plugins"
   run_as_user mkdir -p "$custom_plugins_dir"
-  run_as_user ln -snf "$src_auto" "$custom_plugins_dir/zsh-autosuggestions"
-  run_as_user ln -snf "$src_syntax" "$custom_plugins_dir/zsh-syntax-highlighting"
+  # OMZ solo carga custom/plugins/<nombre>/<nombre>.plugin.zsh: el symlink
+  # al directorio del sistema nunca cargaba ('plugin not found' en Fedora).
+  # Se crea un bridge que hace source al .zsh del paquete.
+  local plugin src_file plug_dir bridge
+  for plugin in zsh-autosuggestions zsh-syntax-highlighting; do
+    case "$plugin" in
+    zsh-autosuggestions) src_file="$src_auto" ;;
+    zsh-syntax-highlighting) src_file="$src_syntax" ;;
+    esac
+    if [ ! -f "$src_file" ]; then
+      warn "No se encontró $src_file: el plugin $plugin quedará sin fuente."
+      continue
+    fi
+    plug_dir="$custom_plugins_dir/$plugin"
+    bridge="$plug_dir/$plugin.plugin.zsh"
+    # Si existía el symlink antiguo al directorio, se reemplaza por el bridge.
+    if [ -L "$plug_dir" ]; then
+      run_as_user rm -f "$plug_dir"
+    fi
+    # No pisar un bridge/clon ajeno (p. ej. clon git del upstream con su
+    # propio .plugin.zsh): solo se escribe si falta o si lo generamos antes.
+    if run_as_user test -f "$bridge" 2>/dev/null &&
+      ! run_as_user grep -q "Generado por linux-setup-script" "$bridge" 2>/dev/null; then
+      warn "Se conserva el $bridge existente (no lo generó este script)."
+      continue
+    fi
+    run_as_user mkdir -p "$plug_dir"
+    run_as_user bash -c "printf '%s\n' '# Generado por linux-setup-script: puente al paquete del sistema.' '[ -f \"$src_file\" ] && source \"$src_file\"' > '$bridge'"
+    info "Plugin $plugin disponible vía $bridge."
+  done
 
   local zshrc="$REAL_HOME/.zshrc"
   [ -f "$zshrc" ] || run_as_user touch "$zshrc"
@@ -1029,7 +1110,9 @@ configure_zshrc() {
 # --- Funciones de Verificación Unificadas ---------------------------------
 
 check_update() {
-  echo -e "${BLUE}Listo para verificar/actualizar${NC}"
+  # Placeholder honesto: este paso siempre está disponible bajo demanda,
+  # no hay un estado "actualizado" barato de verificar sin correr el upgrade.
+  echo -e "${BLUE}Bajo demanda${NC}"
 }
 
 check_flatpak() {
@@ -1109,7 +1192,13 @@ check_configs() {
 }
 
 check_plugins() {
-  check_dir_exists "${ZSH_CUSTOM:-$REAL_HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions"
+  local base="${ZSH_CUSTOM:-$REAL_HOME/.oh-my-zsh/custom}/plugins"
+  if [ -f "$base/zsh-autosuggestions/zsh-autosuggestions.plugin.zsh" ] &&
+    [ -f "$base/zsh-syntax-highlighting/zsh-syntax-highlighting.plugin.zsh" ]; then
+    echo -e "${GREEN}Configurado${NC}"
+  else
+    echo -e "${RED}No${NC}"
+  fi
 }
 
 check_zshrc() {

@@ -6,13 +6,24 @@ set -uo pipefail
 # ==============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/lib/common.sh"
+source "$SCRIPT_DIR/lib/common.sh" || {
+  echo "[ERROR] No se pudo cargar $SCRIPT_DIR/lib/common.sh. Abortando." >&2
+  exit 1
+}
 
 require_root_and_detect_user "$@"
 
+if [ "${DISTRO:-unknown}" != "fedora" ]; then
+  error "Este instalador es para Fedora (detectado: ${DISTRO:-desconocido}). Usa Cachyos.sh en CachyOS."
+  exit 1
+fi
+
 info "Comprobando e instalando requisitos básicos (git, curl, util-linux-user)..."
-if ! dnf install -y git curl util-linux-user >/dev/null 2>&1; then
+prereq_log="/tmp/linux-setup-prereq.log"
+if ! dnf install -y git curl util-linux-user >"$prereq_log" 2>&1; then
   warn "No se pudieron instalar todos los prerrequisitos iniciales. El script intentará continuar."
+  warn "Detalle del fallo en $prereq_log:"
+  sed -n '1,20p' "$prereq_log" | while IFS= read -r line; do warn "  $line"; done
 fi
 
 # ------------------------------------------------------------------------------

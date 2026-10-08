@@ -7,27 +7,28 @@ This repository contains personal, interactive, menu-driven Bash automation scri
 The scripts automate the setup of sixteen (16) core system features and tools, listed in the exact order they appear in the menu and status table:
 
 1. **System Upgrade**: Refreshes repositories and performs upgrades (`dnf upgrade --refresh -y` on Fedora, `pacman -Syu` on CachyOS).
-2. **Flatpak & Flathub**: Installs Flatpak if missing and registers the Flathub remote (`flatpak remote-add --if-not-exists flathub`). Spotify/Obsidian reuse this step automatically (`ensure_flatpak`).
-3. **Zsh & Oh My Zsh**: Installs `zsh`, switches the default shell with `chsh` (warns if `zsh` is missing from `/etc/shells`), and installs `oh-my-zsh` unattended (`RUNZSH=no CHSH=no KEEP_ZSHRC=yes`). The installer is downloaded to a variable first so a failed `curl` is never reported as success.
+2. **Flatpak & Flathub**: Installs Flatpak if missing and registers the Flathub remote for your user (`flatpak remote-add --user --if-not-exists flathub`). Spotify/Obsidian reuse this step automatically (`ensure_flatpak`) and install `--user` too.
+3. **Zsh & Oh My Zsh**: Installs `zsh`, switches the default shell with `chsh` (warns if `zsh` is missing from `/etc/shells`), and installs `oh-my-zsh` unattended (`RUNZSH=no CHSH=no KEEP_ZSHRC=yes`). The installer is downloaded to a variable first so a failed `curl` is never reported as success, then piped to `sh -s`.
 4. **Yazi**: Fast terminal file manager. On Fedora it enables the `lihaohong/yazi` COPR first (non-fatal, falls back to base repos); the binary is verified after install.
-5. **Neovim & LazyVim**: Modern extensible text editor and starter template. Installs dependencies too — Fedora: `neovim git ripgrep fd-find fzf gcc make unzip` plus a `~/.local/bin/fd -> fdfind` symlink for LazyVim/Telescope; CachyOS: `neovim git ripgrep fd`. The LazyVim starter is cloned atomically with a `.bak-<epoch>` backup of any existing `~/.config/nvim`.
+5. **Neovim & LazyVim**: Modern extensible text editor and starter template. Installs dependencies too — Fedora: `neovim git ripgrep fd-find fzf gcc make unzip` plus a `~/.local/bin/fd -> fdfind` symlink for LazyVim/Telescope; CachyOS: `neovim git ripgrep fd`. The LazyVim starter is cloned atomically with a `.bak-<epoch>` backup of any existing `~/.config/nvim`, keeping its `.git` for future `git pull` updates.
 6. **Lazygit**: Git terminal client. On Fedora it enables the **Terra** repository (`terra-release` from `repos.fyralabs.com`) instead of the old COPR; the binary is verified after install.
 7. **Pokemon Colorscripts**: CLI Pokémon sprites viewer (cloned to a `mktemp` dir as your user, installed with `install.sh` as root).
 8. **Gemini Copilot**: Local Node.js global environment and `@google/gemini-cli`. Sets the npm prefix to `~/.npm-global` and adds it to `PATH` in both `~/.zshrc` and `~/.bashrc`.
 9. **Brave Browser**: Secure browser via the official installer (`curl -fsS https://dl.brave.com/install.sh | sh`, with `-o pipefail`); `brave-browser` is verified afterwards. On CachyOS this matters because Brave is not in the official repos (AUR-only `brave-bin`).
-10. **Spotify**: Music player deployed via Flatpak (`com.spotify.Client`).
-11. **Obsidian**: Knowledge base application deployed via Flatpak (`md.obsidian.Obsidian`).
+10. **Spotify**: Music player deployed via Flatpak `--user` (`com.spotify.Client`).
+11. **Obsidian**: Knowledge base application deployed via Flatpak `--user` (`md.obsidian.Obsidian`).
 12. **Dank Material Shell**: Interactive install script (`dankinstall`) that asks for your preferred compositor (niri/hyprland) and terminal (ghostty/kitty/alacritty) before setting up the layout and theme engines. Runs as your user, never as root, with `-o pipefail`. Skipped when `dms` is already installed; installer logs live in `/tmp/dankinstall-*.log`. Must run **before** `configs` and `zshrc` (it creates the `dankcolors` Ghostty theme those steps ship).
 13. **Antigravity CLI**: Installs Google's Antigravity command-line tool as your user (`agy` lands in your `HOME`, verified in `PATH` or `~/.local/bin/agy`).
-14. **Niri Configuration Files**: Clones `https://github.com/fonta81/.BackNiriDank.git` into `~/.config/niri` atomically (a failed clone never touches your existing config) with a `.bak-<epoch>` backup.
-15. **Zsh Plugins**: Installs `zsh-autosuggestions` and `zsh-syntax-highlighting` from distro packages (`/usr/share/...` on Fedora, `/usr/share/zsh/plugins/...` on Arch) and symlinks them into `~/.oh-my-zsh/custom/plugins`. A multiline `plugins=(` block is left untouched with a warning; note the next step overwrites `~/.zshrc` anyway.
+14. **Niri Configuration Files**: Clones `https://github.com/fonta81/.BackNiriDank.git` into `~/.config/niri` atomically (a failed clone never touches your existing config) with a `.bak-<epoch>` backup. If a Niri config already exists (e.g. created by DMS), it asks for `[s/N]` confirmation first. The clone keeps its `.git` so you can `git pull` updates later.
+15. **Zsh Plugins**: Installs `zsh-autosuggestions` and `zsh-syntax-highlighting` from distro packages (`/usr/share/...` on Fedora, `/usr/share/zsh/plugins/...` on Arch) and creates a `<name>.plugin.zsh` bridge in `~/.oh-my-zsh/custom/plugins` that sources the system file (a plain symlink to the system directory never loads in OMZ). A multiline `plugins=(` block is left untouched with a warning; note the next step overwrites `~/.zshrc` anyway.
 16. **Custom `.zshrc` & Ghostty**: Deploys a fully-configured Zsh profile with custom aliases and tools, plus the Ghostty terminal config into `~/.config/ghostty`. This step runs last because it overwrites `~/.zshrc`; the profile is distro-specific (`config_zsh/Fedora/.zshrc` or `config_zsh/Cachyos/.zshrc`), already lists both plugins, and adds `~/.local/bin` (`fd`, `agy`) to `PATH`. Existing files are backed up (`.zshrc.bak.<date>` and `.bak-<epoch>` for Ghostty).
 
 ---
 
 ## Prerequisites
 
-- `git` and `curl`. On Fedora, the script also installs its basic prerequisites (`git`, `curl`, `util-linux-user` for `chsh`) at startup; on CachyOS it ensures `git` and `curl` via pacman.
+- `git` and `curl`. On Fedora, the script also installs its basic prerequisites (`git`, `curl`, `util-linux-user` for `chsh`) at startup (failures are logged to `/tmp/linux-setup-prereq.log`); on CachyOS it ensures `git` and `curl` via pacman.
+- Each entrypoint only runs on its own distro (Fedora.sh aborts outside Fedora, Cachyos.sh outside CachyOS).
 
 ## Usage
 
@@ -47,7 +48,7 @@ Launch them from your normal user session — not from a root shell (`sudo -i`) 
 
 ### Execution Modes
 When running either script, a status table is shown first, then you can choose from:
-1. **Todo automático (All Automatic):** Sequentially executes all 16 configuration steps; only the Dank Material Shell step pauses, since it opens the interactive `dankinstall` prompts (compositor/terminal).
+1. **Todo automático (All Automatic):** Sequentially executes all 16 configuration steps; the Dank Material Shell step pauses (interactive `dankinstall` prompts), and the Niri step asks for `[s/N]` confirmation if a config already exists.
 2. **Interactivo (Interactive Selection):** Prompts for `[s/N]` confirmation (`s` = yes) before executing each step.
 3. **Estado (Check Status):** Displays a clean CLI status table identifying which tools are already present on the system.
 4. **Salir (Exit):** Clean exit.

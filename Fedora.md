@@ -9,7 +9,7 @@ sudo dnf upgrade --refresh -y
 ### Flatpak
 
 cd
-flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 
 ### zsh && ohmyzsh
 
@@ -31,7 +31,6 @@ sudo dnf install -y yazi
 cd
 sudo dnf install -y neovim git ripgrep fd-find fzf gcc make unzip
 git clone https://github.com/LazyVim/starter ~/.config/nvim
-rm -rf ~/.config/nvim/.git
 
 ### lazygit
 
@@ -65,12 +64,12 @@ curl -fsS https://dl.brave.com/install.sh | sh
 ### Spotify
 
 cd
-flatpak install -y flathub com.spotify.Client
+flatpak install --user -y flathub com.spotify.Client
 
 ### Obsidian
 
 cd
-flatpak install -y flathub md.obsidian.Obsidian
+flatpak install --user -y flathub md.obsidian.Obsidian
 
 ## Parte #2(Opcional)
 
@@ -82,18 +81,22 @@ curl -fsSL https://install.danklinux.com | sh
 
 ## My configs
 
-# (respalda la config existente si la hay, en vez de borrarla)
+# (pide confirmación [s/N] si ya existe config, y respalda la existente;
+#  conserva el .git para futuros git pull)
 
 [ -e ~/.config/niri ] && mv ~/.config/niri ~/.config/niri.bak-$(date +%s)
 git clone https://github.com/fonta81/.BackNiriDank.git ~/.config/niri
-rm -rf ~/.config/niri/.git
 
 ## Config plugins ohmyzsh
 
+# (OMZ exige custom/plugins/<nombre>/<nombre>.plugin.zsh: un symlink al
+#  directorio del sistema da 'plugin not found'. Se crea un puente .plugin.zsh
+#  que hace source al .zsh del paquete.)
 sudo dnf install -y zsh-autosuggestions zsh-syntax-highlighting
-mkdir -p ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins
-ln -snf /usr/share/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
-ln -snf /usr/share/zsh-syntax-highlighting ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+mkdir -p ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
+mkdir -p ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+echo '[ -f /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh ] && source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh' > ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions/zsh-autosuggestions.plugin.zsh
+echo '[ -f /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ] && source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh' > ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.plugin.zsh
 # si tu plugins=( es multilinea, anade los plugins a mano
 sed -i 's/^plugins=(/plugins=(zsh-autosuggestions zsh-syntax-highlighting /' ~/.zshrc
 

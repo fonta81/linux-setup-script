@@ -13,11 +13,11 @@ CYAN="\033[0;36m"
 BOLD="\033[1m"
 NC="\033[0m"
 
-info()    { echo -e "${BLUE}[INFO]${NC} $1"; }
+info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 success() { echo -e "${GREEN}[ÉXITO]${NC} $1"; }
-warn()    { echo -e "${YELLOW}[ADVERTENCIA]${NC} $1"; }
-error()   { echo -e "${RED}[ERROR]${NC} $1"; }
-header()  { echo -e "\n${CYAN}${BOLD}=== $1 ===${NC}\n"; }
+warn() { echo -e "${YELLOW}[ADVERTENCIA]${NC} $1"; }
+error() { echo -e "${RED}[ERROR]${NC} $1"; }
+header() { echo -e "\n${CYAN}${BOLD}=== $1 ===${NC}\n"; }
 
 # --- Permisos y usuario real ---------------------------------------------
 require_root_and_detect_user() {
@@ -51,7 +51,8 @@ require_root_and_detect_user() {
 }
 
 run_as_user() {
-  local uid; uid=$(id -u "$REAL_USER")
+  local uid
+  uid=$(id -u "$REAL_USER")
   local xdg=()
   [ -d "/run/user/$uid" ] && xdg+=(XDG_RUNTIME_DIR="/run/user/$uid")
   if [ "$REAL_USER" = "root" ]; then
@@ -63,7 +64,7 @@ run_as_user() {
 
 # --- Registro de resultados (array asociativo en vez de 14 variables) ----
 declare -gA RESULTS=()
-declare -ga TOOL_ORDER=()   # preserva el orden de registro/menú
+declare -ga TOOL_ORDER=() # preserva el orden de registro/menú
 
 # register_tool <id> <etiqueta_menu> <nombre_funcion_install> <nombre_funcion_check>
 declare -gA TOOL_LABEL=()
@@ -86,8 +87,8 @@ check_command_exists() {
 }
 
 check_flatpak_app() {
-  command -v flatpak >/dev/null 2>&1 && flatpak list | grep -q "$1" \
-    && echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No${NC}"
+  command -v flatpak >/dev/null 2>&1 && flatpak list | grep -q "$1" &&
+    echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No${NC}"
 }
 
 check_dir_exists() {
@@ -97,9 +98,9 @@ check_dir_exists() {
 format_res() {
   local val="$1"
   case "$val" in
-    Éxito)   echo -e "${GREEN}$val${NC}" ;;
-    Error)   echo -e "${RED}$val${NC}" ;;
-    *)       echo -e "${BLUE}$val${NC}" ;;
+  Éxito) echo -e "${GREEN}$val${NC}" ;;
+  Error) echo -e "${RED}$val${NC}" ;;
+  *) echo -e "${BLUE}$val${NC}" ;;
   esac
 }
 
@@ -133,11 +134,14 @@ make_tempdir() {
 declare -g DEPLOY_BACKUP=""
 deploy_clone() {
   local url="$1" target="$2"
-  local parent; parent=$(dirname "$target")
-  local base; base=$(basename "$target")
+  local parent
+  parent=$(dirname "$target")
+  local base
+  base=$(basename "$target")
   local tmp inner
   tmp=$(make_tempdir "$parent/.${base}.new.XXXXXX") || {
-    error "No se pudo crear el directorio temporal en $parent."; return 1
+    error "No se pudo crear el directorio temporal en $parent."
+    return 1
   }
   inner="$tmp/$base"
 
@@ -178,13 +182,13 @@ progress_bar() {
   local seconds="${2:-3}"
   local width=30
   local iterations=$((seconds * 4))
-  
+
   printf "%s " "$label"
   for ((i = 0; i < iterations; i++)); do
     local percent=$((i * 100 / iterations))
     local filled=$((percent * width / 100))
     local empty=$((width - filled))
-    
+
     printf "\r%s [" "$label"
     printf "%${filled}s" | tr ' ' '='
     printf "%${empty}s" | tr ' ' '-'
@@ -200,19 +204,19 @@ progress_bar() {
 run_with_spinner() {
   local cmd="$1"
   local msg="${2:-Procesando}"
-  local spinners=( '⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏' )
+  local spinners=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
   local i=0
-  
+
   # Ejecutar comando en background
   eval "$cmd" &
   local pid=$!
-  
+
   while kill -0 $pid 2>/dev/null; do
     printf "\r${CYAN}${spinners[$i]}${NC} $msg"
-    i=$(( (i + 1) % ${#spinners[@]} ))
+    i=$(((i + 1) % ${#spinners[@]}))
     sleep 0.1
   done
-  
+
   wait $pid
   local exit_code=$?
   printf "\r${GREEN}✓${NC} $msg\n"
@@ -225,7 +229,7 @@ draw_box() {
   shift
   local lines=("$@")
   local max_width=0
-  
+
   # Encontrar ancho máximo
   max_width=${#title}
   for line in "${lines[@]}"; do
@@ -234,23 +238,23 @@ draw_box() {
     fi
   done
   max_width=$((max_width + 4))
-  
+
   # Dibujar caja
   printf "┌─"
   printf '─%.0s' $(seq 1 $max_width)
   printf "─┐\n"
-  
+
   if [ -n "$title" ]; then
     printf "│ ${BOLD}%-${max_width}s${NC} │\n" "$title"
     printf "├─"
     printf '─%.0s' $(seq 1 $max_width)
     printf "─┤\n"
   fi
-  
+
   for line in "${lines[@]}"; do
     printf "│ %-${max_width}s │\n" "$line"
   done
-  
+
   printf "└─"
   printf '─%.0s' $(seq 1 $max_width)
   printf "─┘\n"
@@ -262,8 +266,9 @@ draw_box() {
 # personalización)" = 34), si no la fila se sale de la caja.
 show_status_table() {
   local num_w=2 label_w=35 status_w=34
-  local inner=$(( 1 + num_w + 1 + label_w + 1 + status_w + 1 ))
-  local bar; bar=$(printf '─%.0s' $(seq 1 "$inner"))
+  local inner=$((1 + num_w + 1 + label_w + 1 + status_w + 1))
+  local bar
+  bar=$(printf '─%.0s' $(seq 1 "$inner"))
 
   echo -e "\n${BOLD}${CYAN}Estado de las Herramientas${NC}"
   echo -e "${CYAN}╔${bar}╗${NC}"
@@ -283,13 +288,13 @@ show_status_table() {
 
     # printf de bash cuenta bytes en el ancho de campo, no caracteres: un label
     # con acentos ("ó") dejaría la fila 1 carácter más corta. Se rellena a mano.
-    local label_pad=$(( label_w - ${#label} ))
+    local label_pad=$((label_w - ${#label}))
     [ "$label_pad" -lt 0 ] && label_pad=0
 
     # El texto de estado trae códigos ANSI: hay que medirlo sin ellos para padrar
     local plain
     plain=$(printf '%s' "$status_text" | sed 's/\x1b\[[0-9;]*m//g')
-    local pad=$(( status_w - ${#plain} ))
+    local pad=$((status_w - ${#plain}))
     [ "$pad" -lt 0 ] && pad=0
 
     printf "${CYAN}║${NC} %${num_w}d %b%${label_pad}s %b%${pad}s ${CYAN}║${NC}\n" \
@@ -303,28 +308,28 @@ show_summary() {
   clear
   echo ""
   echo -e "${BOLD}${CYAN}╔════════════════════════════════════════════════════════════════╗${NC}"
-  echo -e "${CYAN}║${NC} ${BOLD}Resumen de Operaciones${NC}" 
+  echo -e "${CYAN}║${NC} ${BOLD}Resumen de Operaciones${NC}"
   echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}"
   echo ""
-  
+
   for id in "${TOOL_ORDER[@]}"; do
     local label="${TOOL_LABEL[$id]}"
     local result="${RESULTS[$id]}"
     local formatted_res="$(format_res "$result")"
-    
+
     # Determinar ícono según resultado
     local icon=""
     case "$result" in
-      Éxito)              icon="${GREEN}✓${NC}" ;;
-      Error)              icon="${RED}✗${NC}" ;;
-      "Éxito (Ya existía)") icon="${YELLOW}◐${NC}" ;;
-      Omitido)            icon="${BLUE}◌${NC}" ;;
-      *)                  icon="${BLUE}○${NC}" ;;
+    Éxito) icon="${GREEN}✓${NC}" ;;
+    Error) icon="${RED}✗${NC}" ;;
+    "Éxito (Ya existía)") icon="${YELLOW}◐${NC}" ;;
+    Omitido) icon="${BLUE}◌${NC}" ;;
+    *) icon="${BLUE}○${NC}" ;;
     esac
-    
+
     printf "  $icon %-38s : %b\n" "$label" "$formatted_res"
   done
-  
+
   echo ""
 }
 
@@ -332,7 +337,8 @@ install_all() {
   for id in "${TOOL_ORDER[@]}"; do
     "${TOOL_INSTALL_FN[$id]}"
   done
-  clear; show_summary
+  clear
+  show_summary
 }
 
 install_interactive() {
@@ -345,7 +351,8 @@ install_interactive() {
       RESULTS["$id"]="Omitido"
     fi
   done
-  clear; show_summary
+  clear
+  show_summary
 }
 
 # Menú interactivo con navegación por flechas (fallback a números)
@@ -353,81 +360,101 @@ interactive_main_menu() {
   local title="$1"
   local options=("Todo automático" "Interactivo" "Estado" "Salir")
   local selected=0
-  local bar; bar=$(printf '─%.0s' $(seq 1 76))
-  
+  local bar
+  bar=$(printf '─%.0s' $(seq 1 76))
+
   while true; do
     clear
     echo -e "${CYAN}${BOLD}╔${bar}╗${NC}"
     echo -e "${CYAN}║${NC}  $title"
     echo -e "${CYAN}╚${bar}╝${NC}"
     echo ""
-    
+
     show_status_table
-    
+
     echo -e "${BOLD}Opciones:${NC}"
     for i in "${!options[@]}"; do
       if [ "$i" -eq "$selected" ]; then
-        echo -e "  ${CYAN}${BOLD}➤ $((i+1)). ${options[$i]}${NC}"
+        echo -e "  ${CYAN}${BOLD}➤ $((i + 1)). ${options[$i]}${NC}"
       else
-        echo -e "    $((i+1)). ${options[$i]}"
+        echo -e "    $((i + 1)). ${options[$i]}"
       fi
     done
-    
+
     echo ""
     echo -e "${BOLD}Usa ↑/↓ para navegar, Enter para seleccionar, o escribe número (1-4):${NC}"
-    
+
     # Leer input - soportar flechas y números
     read -rsn 1 input
-    
+
     if [[ "$input" == "" ]]; then
-      read -rsn 2 input  # Leer secuencia de flecha
+      read -rsn 2 input # Leer secuencia de flecha
     fi
-    
+
     case "$input" in
-      A) selected=$(( (selected - 1 + ${#options[@]}) % ${#options[@]} )) ;;
-      B) selected=$(( (selected + 1) % ${#options[@]} )) ;;
-      1) selected=0 ;;
-      2) selected=1 ;;
-      3) selected=2 ;;
-      4) selected=3 ;;
-      "") # Enter presionado
-        case $selected in
-          0) install_all; read -p "Presiona Enter para continuar..." ;;
-          1) install_interactive; read -p "Presiona Enter para continuar..." ;;
-          2) show_status_table; read -p "Presiona Enter para continuar..." ;;
-          3) exit 0 ;;
-        esac
+    A) selected=$(((selected - 1 + ${#options[@]}) % ${#options[@]})) ;;
+    B) selected=$(((selected + 1) % ${#options[@]})) ;;
+    1) selected=0 ;;
+    2) selected=1 ;;
+    3) selected=2 ;;
+    4) selected=3 ;;
+    "") # Enter presionado
+      case $selected in
+      0)
+        install_all
+        read -p "Presiona Enter para continuar..."
         ;;
+      1)
+        install_interactive
+        read -p "Presiona Enter para continuar..."
+        ;;
+      2)
+        show_status_table
+        read -p "Presiona Enter para continuar..."
+        ;;
+      3) exit 0 ;;
+      esac
+      ;;
     esac
   done
 }
 
 main_menu() {
   local title="$1"
-  local bar; bar=$(printf '─%.0s' $(seq 1 76))
+  local bar
+  bar=$(printf '─%.0s' $(seq 1 76))
   while true; do
     clear
     echo -e "${CYAN}${BOLD}╔${bar}╗${NC}"
     echo -e "${CYAN}║${NC}  $title"
     echo -e "${CYAN}╚${bar}╝${NC}"
     echo ""
-    
+
     show_status_table
-    
+
     echo -e "${BOLD}Opciones:${NC}"
     echo -e "  1) ${BOLD}Todo automático${NC}"
     echo -e "  2) ${BOLD}Interactivo${NC}"
     echo -e "  3) ${BOLD}Estado${NC}"
     echo -e "  4) ${BOLD}Salir${NC}"
     echo ""
-    
+
     read -p "${BOLD}Opción (1-4):${NC} " opt
     case $opt in
-      1) install_all; read -p "Presiona Enter para continuar..." ;;
-      2) install_interactive; read -p "Presiona Enter para continuar..." ;;
-      3) show_status_table; read -p "Presiona Enter para continuar..." ;;
-      4) exit 0 ;;
-      *) warn "Opción inválida. Intenta de nuevo." ;;
+    1)
+      install_all
+      read -p "Presiona Enter para continuar..."
+      ;;
+    2)
+      install_interactive
+      read -p "Presiona Enter para continuar..."
+      ;;
+    3)
+      show_status_table
+      read -p "Presiona Enter para continuar..."
+      ;;
+    4) exit 0 ;;
+    *) warn "Opción inválida. Intenta de nuevo." ;;
     esac
   done
 }
@@ -448,9 +475,12 @@ detect_distro() {
 install_package() {
   local packages=("$@")
   case "$DISTRO" in
-    fedora)  dnf install -y "${packages[@]}" ;;
-    cachyos) pacman -S --noconfirm "${packages[@]}" ;;
-    *)       error "Distribución no soportada ($DISTRO): no se pueden instalar '${packages[*]}'."; return 1 ;;
+  fedora) dnf install -y "${packages[@]}" ;;
+  cachyos) pacman -S --noconfirm "${packages[@]}" ;;
+  *)
+    error "Distribución no soportada ($DISTRO): no se pueden instalar '${packages[*]}'."
+    return 1
+    ;;
   esac
 }
 
@@ -484,9 +514,12 @@ run_on_distro() {
 install_update() {
   header "Actualizando el sistema $DISTRO"
   if run_on_distro "dnf upgrade --refresh -y" "pacman -Syu --noconfirm"; then
-    success "Sistema actualizado correctamente."; RESULTS[update]="Éxito"
+    success "Sistema actualizado correctamente."
+    RESULTS[update]="Éxito"
   else
-    error "Error al actualizar el sistema."; RESULTS[update]="Error"; return 1
+    error "Error al actualizar el sistema."
+    RESULTS[update]="Error"
+    return 1
   fi
 }
 
@@ -496,17 +529,24 @@ install_flatpak() {
   if [ "$DISTRO" = "fedora" ]; then
     info "Instalando Flatpak (idempotente si ya existe)..."
     if ! install_package flatpak; then
-      error "Error al instalar Flatpak."; RESULTS[flatpak]="Error"; return 1
+      error "Error al instalar Flatpak."
+      RESULTS[flatpak]="Error"
+      return 1
     fi
   elif [ "$DISTRO" = "cachyos" ]; then
     if ! pacman -S --noconfirm flatpak; then
-      error "Error al instalar Flatpak."; RESULTS[flatpak]="Error"; return 1
+      error "Error al instalar Flatpak."
+      RESULTS[flatpak]="Error"
+      return 1
     fi
   fi
   if flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo; then
-    success "Repositorio Flathub configurado correctamente."; RESULTS[flatpak]="Éxito"
+    success "Repositorio Flathub configurado correctamente."
+    RESULTS[flatpak]="Éxito"
   else
-    error "Error al agregar el repositorio Flathub."; RESULTS[flatpak]="Error"; return 1
+    error "Error al agregar el repositorio Flathub."
+    RESULTS[flatpak]="Error"
+    return 1
   fi
 }
 
@@ -524,7 +564,9 @@ install_zsh_ohmyzsh() {
   header "Instalando Zsh y Oh My Zsh"
   info "Instalando Zsh..."
   if ! install_package zsh; then
-    error "Error al instalar Zsh."; RESULTS[zsh]="Error"; return 1
+    error "Error al instalar Zsh."
+    RESULTS[zsh]="Error"
+    return 1
   fi
 
   if command -v chsh >/dev/null 2>&1; then
@@ -547,14 +589,19 @@ install_zsh_ohmyzsh() {
     info "Instalando Oh My Zsh en modo unattended..."
     # curl primero a una variable: si falla, sh -c "" sale 0 y daría un falso Éxito
     local omz_installer
-    if ! omz_installer=$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh) \
-        || [ -z "$omz_installer" ]; then
-      error "No se pudo descargar el instalador de Oh My Zsh."; RESULTS[zsh]="Error"; return 1
+    if ! omz_installer=$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh) ||
+      [ -z "$omz_installer" ]; then
+      error "No se pudo descargar el instalador de Oh My Zsh."
+      RESULTS[zsh]="Error"
+      return 1
     fi
     if run_as_user env RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -c "$omz_installer" "" --unattended; then
-      success "Oh My Zsh instalado de manera exitosa."; RESULTS[zsh]="Éxito"
+      success "Oh My Zsh instalado de manera exitosa."
+      RESULTS[zsh]="Éxito"
     else
-      error "Error durante la instalación de Oh My Zsh."; RESULTS[zsh]="Error"; return 1
+      error "Error durante la instalación de Oh My Zsh."
+      RESULTS[zsh]="Error"
+      return 1
     fi
   fi
 }
@@ -572,13 +619,18 @@ install_yazi() {
     fi
   fi
   if ! install_package yazi; then
-    error "Error al instalar Yazi."; RESULTS[yazi]="Error"; return 1
+    error "Error al instalar Yazi."
+    RESULTS[yazi]="Error"
+    return 1
   fi
   # Verificación: nunca reportar Éxito sin el binario (patrón dank/antigravity)
   if ! command -v yazi >/dev/null 2>&1; then
-    error "El instalador terminó pero 'yazi' no se encontró."; RESULTS[yazi]="Error"; return 1
+    error "El instalador terminó pero 'yazi' no se encontró."
+    RESULTS[yazi]="Error"
+    return 1
   fi
-  success "Yazi instalado correctamente."; RESULTS[yazi]="Éxito"
+  success "Yazi instalado correctamente."
+  RESULTS[yazi]="Éxito"
 }
 
 # 5. Neovim y LazyVim
@@ -587,7 +639,9 @@ install_neovim_lazyvim() {
   if [ "$DISTRO" = "fedora" ]; then
     info "Instalando Neovim, git, ripgrep, fd-find y dependencias de LazyVim (fzf, gcc, make, unzip)..."
     if ! install_package neovim git ripgrep fd-find fzf gcc make unzip; then
-      error "Error al instalar Neovim o sus dependencias básicas."; RESULTS[neovim]="Error"; return 1
+      error "Error al instalar Neovim o sus dependencias básicas."
+      RESULTS[neovim]="Error"
+      return 1
     fi
     # En Fedora el binario se llama fdfind; LazyVim/mason buscan 'fd'.
     # Se evalúa como el usuario real: nvim corre en su sesión y el enlace
@@ -608,16 +662,20 @@ install_neovim_lazyvim() {
     # que necesita LazyVim/telescope. Sin ellos el paso parecía correcto pero
     # el editor fallaba al usar la búsqueda de archivos.
     if ! install_package neovim git ripgrep fd; then
-      error "Error al instalar Neovim o sus dependencias básicas."; RESULTS[neovim]="Error"; return 1
+      error "Error al instalar Neovim o sus dependencias básicas."
+      RESULTS[neovim]="Error"
+      return 1
     fi
   fi
 
   info "Clonando la plantilla starter de LazyVim..."
   if deploy_clone https://github.com/LazyVim/starter "$REAL_HOME/.config/nvim"; then
-    success "Neovim y LazyVim configurados de manera exitosa."; RESULTS[neovim]="Éxito"
+    success "Neovim y LazyVim configurados de manera exitosa."
+    RESULTS[neovim]="Éxito"
   else
     error "Error al configurar Neovim/LazyVim${DEPLOY_BACKUP:+ (respaldo previo en $DEPLOY_BACKUP)}."
-    RESULTS[neovim]="Error"; return 1
+    RESULTS[neovim]="Error"
+    return 1
   fi
 }
 
@@ -627,43 +685,60 @@ install_lazygit() {
   if [ "$DISTRO" = "fedora" ]; then
     info "Habilitando el repositorio Terra para Lazygit..."
     if ! dnf install -y --nogpgcheck \
-        --repofrompath "terra-fyralabs,https://repos.fyralabs.com/terra\$releasever" \
-        terra-release; then
-      error "Error al habilitar el repositorio Terra."; RESULTS[lazygit]="Error"; return 1
+      --repofrompath "terra-fyralabs,https://repos.fyralabs.com/terra\$releasever" \
+      terra-release; then
+      error "Error al habilitar el repositorio Terra."
+      RESULTS[lazygit]="Error"
+      return 1
     fi
     if ! install_package lazygit; then
-      error "Error al instalar Lazygit."; RESULTS[lazygit]="Error"; return 1
+      error "Error al instalar Lazygit."
+      RESULTS[lazygit]="Error"
+      return 1
     fi
   else
     if ! install_package lazygit; then
-      error "Error al instalar Lazygit."; RESULTS[lazygit]="Error"; return 1
+      error "Error al instalar Lazygit."
+      RESULTS[lazygit]="Error"
+      return 1
     fi
   fi
   # Verificación: nunca reportar Éxito sin el binario (patrón yazi/brave/antigravity)
   if ! command -v lazygit >/dev/null 2>&1; then
-    error "El instalador terminó pero 'lazygit' no se encontró."; RESULTS[lazygit]="Error"; return 1
+    error "El instalador terminó pero 'lazygit' no se encontró."
+    RESULTS[lazygit]="Error"
+    return 1
   fi
-  success "Lazygit instalado correctamente."; RESULTS[lazygit]="Éxito"
+  success "Lazygit instalado correctamente."
+  RESULTS[lazygit]="Éxito"
 }
 
 # 7. Pokemon Colorscripts
 install_pokemon_colorscripts() {
   header "Instalando Pokemon Colorscripts"
   # mktemp -d evita el /tmp con nombre fijo, que otro usuario podría crear antes
-  local temp_dir; temp_dir=$(make_tempdir /tmp/pokemon-colorscripts.XXXXXX) || {
-    error "No se pudo crear el directorio temporal."; RESULTS[pokemon]="Error"; return 1
+  local temp_dir
+  temp_dir=$(make_tempdir /tmp/pokemon-colorscripts.XXXXXX) || {
+    error "No se pudo crear el directorio temporal."
+    RESULTS[pokemon]="Error"
+    return 1
   }
   info "Clonando repositorio..."
   if ! run_as_user git clone https://gitlab.com/phoneybadger/pokemon-colorscripts.git "$temp_dir/repo"; then
-    error "Error al clonar el repositorio de pokemon-colorscripts."; RESULTS[pokemon]="Error"
-    rm -rf "$temp_dir"; return 1
+    error "Error al clonar el repositorio de pokemon-colorscripts."
+    RESULTS[pokemon]="Error"
+    rm -rf "$temp_dir"
+    return 1
   fi
   # install.sh copia a /usr/local/opt y symlinkea en /usr/local/bin: necesita root
   if (cd "$temp_dir/repo" && ./install.sh); then
-    success "Pokemon Colorscripts instalado correctamente."; RESULTS[pokemon]="Éxito"
+    success "Pokemon Colorscripts instalado correctamente."
+    RESULTS[pokemon]="Éxito"
   else
-    error "Error al instalar Pokemon Colorscripts."; RESULTS[pokemon]="Error"
-    rm -rf "$temp_dir"; return 1
+    error "Error al instalar Pokemon Colorscripts."
+    RESULTS[pokemon]="Error"
+    rm -rf "$temp_dir"
+    return 1
   fi
   rm -rf "$temp_dir"
 }
@@ -673,7 +748,9 @@ install_gemini_copilot() {
   header "Instalando Gemini Copilot (Node.js & gemini-cli)"
   info "Instalando Node.js y npm..."
   if ! install_package nodejs npm; then
-    error "Error al instalar Node.js o npm."; RESULTS[gemini]="Error"; return 1
+    error "Error al instalar Node.js o npm."
+    RESULTS[gemini]="Error"
+    return 1
   fi
 
   info "Configurando el prefijo de npm global para evitar el uso de sudo..."
@@ -705,7 +782,9 @@ install_gemini_copilot() {
     warn "Nota: Recuerda reiniciar la terminal o ejecutar 'source ~/.zshrc' para poder usar el comando 'gemini'."
     RESULTS[gemini]="Éxito"
   else
-    error "Error al instalar el paquete @google/gemini-cli de forma global."; RESULTS[gemini]="Error"; return 1
+    error "Error al instalar el paquete @google/gemini-cli de forma global."
+    RESULTS[gemini]="Error"
+    return 1
   fi
 }
 
@@ -718,12 +797,17 @@ install_brave() {
   # -o pipefail: sin él, un curl fallido deja a sh sin entrada y devuelve 0.
   if bash -o pipefail -c 'curl -fsS https://dl.brave.com/install.sh | sh'; then
     if command -v brave-browser >/dev/null 2>&1; then
-      success "Brave Browser instalado correctamente."; RESULTS[brave]="Éxito"
+      success "Brave Browser instalado correctamente."
+      RESULTS[brave]="Éxito"
     else
-      error "El instalador terminó pero 'brave-browser' no se encontró."; RESULTS[brave]="Error"; return 1
+      error "El instalador terminó pero 'brave-browser' no se encontró."
+      RESULTS[brave]="Error"
+      return 1
     fi
   else
-    error "Error al instalar Brave Browser."; RESULTS[brave]="Error"; return 1
+    error "Error al instalar Brave Browser."
+    RESULTS[brave]="Error"
+    return 1
   fi
 }
 
@@ -732,9 +816,12 @@ install_spotify() {
   header "Instalando Spotify (Flatpak)"
   ensure_flatpak
   if flatpak install -y flathub com.spotify.Client; then
-    success "Spotify instalado correctamente via Flatpak."; RESULTS[spotify]="Éxito"
+    success "Spotify instalado correctamente via Flatpak."
+    RESULTS[spotify]="Éxito"
   else
-    error "Error al instalar Spotify."; RESULTS[spotify]="Error"; return 1
+    error "Error al instalar Spotify."
+    RESULTS[spotify]="Error"
+    return 1
   fi
 }
 
@@ -743,9 +830,12 @@ install_obsidian() {
   header "Instalando Obsidian (Flatpak)"
   ensure_flatpak
   if flatpak install -y flathub md.obsidian.Obsidian; then
-    success "Obsidian instalado correctamente via Flatpak."; RESULTS[obsidian]="Éxito"
+    success "Obsidian instalado correctamente via Flatpak."
+    RESULTS[obsidian]="Éxito"
   else
-    error "Error al instalar Obsidian."; RESULTS[obsidian]="Error"; return 1
+    error "Error al instalar Obsidian."
+    RESULTS[obsidian]="Error"
+    return 1
   fi
 }
 
@@ -760,12 +850,14 @@ install_dank_shell() {
 
   if dms_installed; then
     warn "Dank Material Shell ya está instalado. Se omite; usa 'dms' para reconfigurar o actualizar."
-    RESULTS[dank]="Éxito (Ya existía)"; return 0
+    RESULTS[dank]="Éxito (Ya existía)"
+    return 0
   fi
 
   if [ "$REAL_USER" = "root" ]; then
     error "dankinstall se niega a ejecutarse como root y no hay un usuario real detectado."
-    RESULTS[dank]="Error"; return 1
+    RESULTS[dank]="Error"
+    return 1
   fi
 
   info "Se abrirá el instalador interactivo de Dank. Responde sus preguntas (compositor: niri/hyprland, terminal: ghostty/kitty, etc.)."
@@ -775,25 +867,31 @@ install_dank_shell() {
   if ! run_as_user bash -o pipefail -c 'curl -fsSL https://install.danklinux.com | sh'; then
     error "Error al instalar Dank Material Shell."
     warn "Revisa los logs del instalador en /tmp/dankinstall-*.log"
-    RESULTS[dank]="Error"; return 1
+    RESULTS[dank]="Error"
+    return 1
   fi
 
   if ! dms_installed; then
     error "El instalador terminó pero 'dms' no se encontró en el sistema."
     warn "Revisa los logs del instalador en /tmp/dankinstall-*.log"
-    RESULTS[dank]="Error"; return 1
+    RESULTS[dank]="Error"
+    return 1
   fi
 
-  success "Dank Material Shell instalado correctamente."; RESULTS[dank]="Éxito"
+  success "Dank Material Shell instalado correctamente."
+  RESULTS[dank]="Éxito"
 }
 
 # 13. Configs Niri
 install_configs() {
   header "Aplicando configuraciones personales"
   if deploy_clone https://github.com/fonta81/.BackNiriDank.git "$REAL_HOME/.config/niri"; then
-    success "Configuraciones aplicadas correctamente."; RESULTS[configs]="Éxito"
+    success "Configuraciones aplicadas correctamente."
+    RESULTS[configs]="Éxito"
   else
-    error "Error al aplicar configuraciones personales${DEPLOY_BACKUP:+ (respaldo previo en $DEPLOY_BACKUP)}."; RESULTS[configs]="Error"; return 1
+    error "Error al aplicar configuraciones personales${DEPLOY_BACKUP:+ (respaldo previo en $DEPLOY_BACKUP)}."
+    RESULTS[configs]="Error"
+    return 1
   fi
 }
 
@@ -805,13 +903,17 @@ install_antigravity() {
   if run_as_user bash -o pipefail -c 'curl -fsSL https://antigravity.google/cli/install.sh | bash'; then
     # command -v del usuario real: el PATH de root no es el suyo
     if run_as_user bash -c 'command -v agy' >/dev/null 2>&1 || [ -x "$REAL_HOME/.local/bin/agy" ]; then
-      success "Antigravity CLI instalado correctamente."; RESULTS[antigravity]="Éxito"
+      success "Antigravity CLI instalado correctamente."
+      RESULTS[antigravity]="Éxito"
     else
       error "El instalador terminó pero 'agy' no se encontró para $REAL_USER."
-      RESULTS[antigravity]="Error"; return 1
+      RESULTS[antigravity]="Error"
+      return 1
     fi
   else
-    error "Error al instalar Antigravity CLI."; RESULTS[antigravity]="Error"; return 1
+    error "Error al instalar Antigravity CLI."
+    RESULTS[antigravity]="Error"
+    return 1
   fi
 }
 
@@ -819,9 +921,11 @@ install_antigravity() {
 install_zsh_plugins() {
   header "Configurando Plugins de Oh My Zsh"
   if ! install_package zsh-autosuggestions zsh-syntax-highlighting; then
-    error "Error al instalar paquetes de plugins."; RESULTS[plugins]="Error"; return 1
+    error "Error al instalar paquetes de plugins."
+    RESULTS[plugins]="Error"
+    return 1
   fi
-  
+
   # Rutas de origen según distro
   if [ "$DISTRO" = "fedora" ]; then
     local src_auto="/usr/share/zsh-autosuggestions"
@@ -851,8 +955,8 @@ install_zsh_plugins() {
       info "La lista plugins=( de $zshrc es multilínea: no se modifica automáticamente."
       info "  Añade $plugin a mano si hace falta (el paso 'Configuración .zshrc' sobrescribe el archivo)."
     elif run_as_user grep -q '^plugins=([^)]*)' "$zshrc"; then
-      if run_as_user sed -i "s/^plugins=(\([^)]*\))/plugins=(\1 $plugin)/" "$zshrc" \
-        && run_as_user grep -qE "(^|[[:space:]])${plugin}([[:space:])]|$)" "$zshrc"; then
+      if run_as_user sed -i "s/^plugins=(\([^)]*\))/plugins=(\1 $plugin)/" "$zshrc" &&
+        run_as_user grep -qE "(^|[[:space:]])${plugin}([[:space:])]|$)" "$zshrc"; then
         info "Plugin $plugin añadido a .zshrc."
       else
         warn "No se pudo añadir $plugin a la lista plugins=( de $zshrc."
@@ -862,7 +966,8 @@ install_zsh_plugins() {
       info "  Añade $plugin a mano si hace falta (el paso 'Configuración .zshrc' sobrescribe el archivo)."
     fi
   done
-  success "Plugins de Oh My Zsh configurados."; RESULTS[plugins]="Éxito"
+  success "Plugins de Oh My Zsh configurados."
+  RESULTS[plugins]="Éxito"
 }
 
 # 16. Configurar .zshrc personalizado y Ghostty
@@ -870,11 +975,13 @@ configure_zshrc() {
   header "Configurando archivo .zshrc personalizado y Ghostty"
   local zshrc_dir
   case "$DISTRO" in
-    fedora)  zshrc_dir="$SCRIPT_DIR/config_zsh/Fedora" ;;
-    cachyos) zshrc_dir="$SCRIPT_DIR/config_zsh/Cachyos" ;;
-    *)
-      error "Distribución desconocida ($DISTRO): no se qué .zshrc instalar."
-      RESULTS[zshrc]="Error"; return 1 ;;
+  fedora) zshrc_dir="$SCRIPT_DIR/config_zsh/Fedora" ;;
+  cachyos) zshrc_dir="$SCRIPT_DIR/config_zsh/Cachyos" ;;
+  *)
+    error "Distribución desconocida ($DISTRO): no se qué .zshrc instalar."
+    RESULTS[zshrc]="Error"
+    return 1
+    ;;
   esac
   local source_zshrc="$zshrc_dir/.zshrc"
   if [ -f "$source_zshrc" ]; then
@@ -892,7 +999,9 @@ configure_zshrc() {
     if run_as_user cp "$source_zshrc" "$REAL_HOME/.zshrc"; then
       success ".zshrc configurado de manera exitosa."
     else
-      error "Error al copiar el archivo .zshrc a $REAL_HOME."; RESULTS[zshrc]="Error"; return 1
+      error "Error al copiar el archivo .zshrc a $REAL_HOME."
+      RESULTS[zshrc]="Error"
+      return 1
     fi
   else
     error "No se encontró el archivo .zshrc de origen en $source_zshrc."
@@ -925,8 +1034,8 @@ check_update() {
 
 check_flatpak() {
   # remote-list como el usuario real (cubre remotos system + user).
-  command -v flatpak >/dev/null 2>&1 && run_as_user flatpak remote-list 2>/dev/null | grep -q "flathub" 2>/dev/null \
-    && echo -e "${GREEN}Configurado${NC}" || echo -e "${RED}No configurado${NC}"
+  command -v flatpak >/dev/null 2>&1 && run_as_user flatpak remote-list 2>/dev/null | grep -q "flathub" 2>/dev/null &&
+    echo -e "${GREEN}Configurado${NC}" || echo -e "${RED}No configurado${NC}"
 }
 
 check_zsh() {
@@ -958,13 +1067,13 @@ check_lazygit() {
 }
 
 check_pokemon() {
-  { command -v pokemon-colorscripts >/dev/null 2>&1 || [ -f "/usr/local/bin/pokemon-colorscripts" ]; } \
-    && echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
+  { command -v pokemon-colorscripts >/dev/null 2>&1 || [ -f "/usr/local/bin/pokemon-colorscripts" ]; } &&
+    echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
 }
 
 check_gemini() {
-  { [ -f "$REAL_HOME/.npm-global/bin/gemini" ] || command -v gemini >/dev/null 2>&1; } \
-    && echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
+  { [ -f "$REAL_HOME/.npm-global/bin/gemini" ] || command -v gemini >/dev/null 2>&1; } &&
+    echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
 }
 
 check_brave() {
@@ -973,13 +1082,13 @@ check_brave() {
 
 check_spotify() {
   # list como el usuario real: como root no se ven las apps --user.
-  command -v flatpak >/dev/null 2>&1 && run_as_user flatpak list --columns=application 2>/dev/null | grep -q "com.spotify.Client" 2>/dev/null \
-    && echo -e "${GREEN}Instalado (Flatpak)${NC}" || echo -e "${RED}No instalado${NC}"
+  command -v flatpak >/dev/null 2>&1 && run_as_user flatpak list --columns=application 2>/dev/null | grep -q "com.spotify.Client" 2>/dev/null &&
+    echo -e "${GREEN}Instalado (Flatpak)${NC}" || echo -e "${RED}No instalado${NC}"
 }
 
 check_obsidian() {
-  command -v flatpak >/dev/null 2>&1 && run_as_user flatpak list --columns=application 2>/dev/null | grep -q "md.obsidian.Obsidian" 2>/dev/null \
-    && echo -e "${GREEN}Instalado (Flatpak)${NC}" || echo -e "${RED}No instalado${NC}"
+  command -v flatpak >/dev/null 2>&1 && run_as_user flatpak list --columns=application 2>/dev/null | grep -q "md.obsidian.Obsidian" 2>/dev/null &&
+    echo -e "${GREEN}Instalado (Flatpak)${NC}" || echo -e "${RED}No instalado${NC}"
 }
 
 check_dank() {
@@ -991,8 +1100,8 @@ check_dank() {
 }
 
 check_antigravity() {
-  { command -v agy >/dev/null 2>&1 || [ -x "$REAL_HOME/.local/bin/agy" ]; } \
-    && echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
+  { command -v agy >/dev/null 2>&1 || [ -x "$REAL_HOME/.local/bin/agy" ]; } &&
+    echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
 }
 
 check_configs() {
@@ -1023,4 +1132,3 @@ check_zshrc() {
 }
 
 detect_distro
-

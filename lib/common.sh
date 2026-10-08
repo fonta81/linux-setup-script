@@ -155,6 +155,12 @@ deploy_clone() {
   local base
   base=$(basename "$target")
   local tmp inner
+  # En instalaciones frescas ~/.config puede no existir y mktemp fallaría:
+  # se asegura el directorio padre como el usuario real antes del temporal.
+  run_as_user mkdir -p "$parent" || {
+    error "No se pudo crear el directorio padre $parent."
+    return 1
+  }
   tmp=$(make_tempdir "$parent/.${base}.new.XXXXXX") || {
     error "No se pudo crear el directorio temporal en $parent."
     return 1
@@ -645,7 +651,7 @@ install_yazi() {
     # No es fatal y va en un 'if' propio: encadenarlo con '&&' hacia el error
     # hacía que, si el COPR se habilitaba bien, install_package nunca corriera
     # y el paso cayera en 'Éxito' sin instalar nada. Se omite si ya está activo.
-    if dnf copr list enabled 2>/dev/null | grep -q "lihaohong/yazi"; then
+    if dnf copr list --enabled 2>/dev/null | grep -q "lihaohong/yazi"; then
       info "El COPR lihaohong/yazi ya está habilitado."
     elif ! enable_copr_or_aur "lihaohong/yazi"; then
       warn "No se pudo habilitar el COPR lihaohong/yazi; se intenta con los repos base."
@@ -676,10 +682,12 @@ install_neovim_lazyvim() {
       RESULTS[neovim]="Error"
       return 1
     fi
-    # En Fedora el binario se llama fdfind; LazyVim/mason buscan 'fd'.
+    # El paquete Fedora 'fd-find' ya provee el binario 'fd' (el nombre
+    # 'fdfind' es propio de Debian); el enlace solo hace falta si aparece
+    # 'fdfind' sin que haya un 'fd' visible para el usuario real.
     # El enlace vive en su ~/.local/bin (que el .zshrc añade al PATH al final,
     # así que solo se verifica el archivo, no 'command -v', en esta sesión).
-    if [ ! -e "$REAL_HOME/.local/bin/fd" ]; then
+    if [ ! -e "$REAL_HOME/.local/bin/fd" ] && ! run_as_user bash -c 'command -v fd' >/dev/null 2>&1; then
       local fdfind_path
       fdfind_path=$(run_as_user bash -c 'command -v fdfind' 2>/dev/null)
       if [ -n "$fdfind_path" ]; then

@@ -86,5 +86,7 @@ if command -v pokemon-colorscripts &> /dev/null; then
 fi
 
 
-# Added by Antigravity CLI installer
-export PATH="/home/mteo/.local/bin:$PATH"
+# Agrega ~/.local/bin al PATH (fd, agy y otras herramientas de usuario)
+if [[ ! ":$PATH:" == *":$HOME/.local/bin:"* ]]; then
+  export PATH="$HOME/.local/bin:$PATH"
+fi

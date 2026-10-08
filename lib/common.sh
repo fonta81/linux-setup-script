@@ -493,7 +493,12 @@ install_update() {
 # 2. Configurar Flatpak
 install_flatpak() {
   header "Configurando Flatpak y Flathub"
-  if [ "$DISTRO" = "cachyos" ]; then
+  if [ "$DISTRO" = "fedora" ]; then
+    info "Instalando Flatpak (idempotente si ya existe)..."
+    if ! install_package flatpak; then
+      error "Error al instalar Flatpak."; RESULTS[flatpak]="Error"; return 1
+    fi
+  elif [ "$DISTRO" = "cachyos" ]; then
     if ! pacman -S --noconfirm flatpak; then
       error "Error al instalar Flatpak."; RESULTS[flatpak]="Error"; return 1
     fi
@@ -506,7 +511,9 @@ install_flatpak() {
 }
 
 ensure_flatpak() {
-  if ! flatpak remote-list | grep -q "flathub" 2>/dev/null; then
+  # Se consulta como el usuario real: como root solo se ven los remotos del
+  # sistema y el estado mentiría si Flathub se añadió --user.
+  if ! run_as_user flatpak remote-list 2>/dev/null | grep -q "flathub" 2>/dev/null; then
     info "Configurando Flathub primero para dar soporte a las aplicaciones Flatpak..."
     install_flatpak
   fi
@@ -578,15 +585,21 @@ install_yazi() {
 install_neovim_lazyvim() {
   header "Instalando Neovim, LazyVim y Dependencias"
   if [ "$DISTRO" = "fedora" ]; then
-    info "Instalando Neovim, git, ripgrep y fd-find..."
-    if ! install_package neovim git ripgrep fd-find; then
+    info "Instalando Neovim, git, ripgrep, fd-find y dependencias de LazyVim (fzf, gcc, make, unzip)..."
+    if ! install_package neovim git ripgrep fd-find fzf gcc make unzip; then
       error "Error al instalar Neovim o sus dependencias básicas."; RESULTS[neovim]="Error"; return 1
     fi
-    # En Fedora el binario se llama fdfind; LazyVim/mason buscan 'fd'
-    if ! command -v fd >/dev/null 2>&1 && command -v fdfind >/dev/null 2>&1; then
-      run_as_user mkdir -p "$REAL_HOME/.local/bin"
-      if run_as_user ln -snf "$(command -v fdfind)" "$REAL_HOME/.local/bin/fd"; then
-        info "Creado enlace ~/.local/bin/fd -> $(command -v fdfind) para las herramientas de Neovim."
+    # En Fedora el binario se llama fdfind; LazyVim/mason buscan 'fd'.
+    # Se evalúa como el usuario real: nvim corre en su sesión y el enlace
+    # vive en su ~/.local/bin (que el .zshrc ya pone en el PATH).
+    if ! run_as_user bash -c 'command -v fd' >/dev/null 2>&1; then
+      local fdfind_path
+      fdfind_path=$(run_as_user bash -c 'command -v fdfind' 2>/dev/null)
+      if [ -n "$fdfind_path" ]; then
+        run_as_user mkdir -p "$REAL_HOME/.local/bin"
+        if run_as_user ln -snf "$fdfind_path" "$REAL_HOME/.local/bin/fd"; then
+          info "Creado enlace ~/.local/bin/fd -> $fdfind_path para las herramientas de Neovim."
+        fi
       fi
     fi
   else
@@ -625,6 +638,10 @@ install_lazygit() {
     if ! install_package lazygit; then
       error "Error al instalar Lazygit."; RESULTS[lazygit]="Error"; return 1
     fi
+  fi
+  # Verificación: nunca reportar Éxito sin el binario (patrón yazi/brave/antigravity)
+  if ! command -v lazygit >/dev/null 2>&1; then
+    error "El instalador terminó pero 'lazygit' no se encontró."; RESULTS[lazygit]="Error"; return 1
   fi
   success "Lazygit instalado correctamente."; RESULTS[lazygit]="Éxito"
 }
@@ -879,7 +896,7 @@ configure_zshrc() {
     fi
   else
     error "No se encontró el archivo .zshrc de origen en $source_zshrc."
-    RESULTS[zshrc]="Error (No encontrado)"
+    RESULTS[zshrc]="Error"
     return 1
   fi
 
@@ -907,7 +924,8 @@ check_update() {
 }
 
 check_flatpak() {
-  command -v flatpak >/dev/null 2>&1 && flatpak remote-list 2>/dev/null | grep -q "flathub" 2>/dev/null \
+  # remote-list como el usuario real (cubre remotos system + user).
+  command -v flatpak >/dev/null 2>&1 && run_as_user flatpak remote-list 2>/dev/null | grep -q "flathub" 2>/dev/null \
     && echo -e "${GREEN}Configurado${NC}" || echo -e "${RED}No configurado${NC}"
 }
 
@@ -954,12 +972,13 @@ check_brave() {
 }
 
 check_spotify() {
-  command -v flatpak >/dev/null 2>&1 && flatpak list --columns=application 2>/dev/null | grep -q "com.spotify.Client" 2>/dev/null \
+  # list como el usuario real: como root no se ven las apps --user.
+  command -v flatpak >/dev/null 2>&1 && run_as_user flatpak list --columns=application 2>/dev/null | grep -q "com.spotify.Client" 2>/dev/null \
     && echo -e "${GREEN}Instalado (Flatpak)${NC}" || echo -e "${RED}No instalado${NC}"
 }
 
 check_obsidian() {
-  command -v flatpak >/dev/null 2>&1 && flatpak list --columns=application 2>/dev/null | grep -q "md.obsidian.Obsidian" 2>/dev/null \
+  command -v flatpak >/dev/null 2>&1 && run_as_user flatpak list --columns=application 2>/dev/null | grep -q "md.obsidian.Obsidian" 2>/dev/null \
     && echo -e "${GREEN}Instalado (Flatpak)${NC}" || echo -e "${RED}No instalado${NC}"
 }
 

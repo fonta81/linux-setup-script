@@ -10,7 +10,7 @@ flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.f
 ### zsh && ohmyzsh:
 cd
 sudo pacman -S zsh
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
 
 # Note: Paths for plugins in Arch differ from Fedora
 source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh

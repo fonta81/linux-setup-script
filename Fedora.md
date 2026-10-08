@@ -13,7 +13,7 @@ flatpak remote-add --if-not-exists flathub <https://dl.flathub.org/repo/flathub.
 
 cd
 dnf install zsh
-sh -c "$(curl -fsSL <https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh>)"
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
 
 source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
 source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh

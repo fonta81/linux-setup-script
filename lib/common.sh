@@ -544,7 +544,7 @@ install_zsh_ohmyzsh() {
         || [ -z "$omz_installer" ]; then
       error "No se pudo descargar el instalador de Oh My Zsh."; RESULTS[zsh]="Error"; return 1
     fi
-    if run_as_user sh -c "$omz_installer" "" --unattended; then
+    if run_as_user env RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -c "$omz_installer" "" --unattended; then
       success "Oh My Zsh instalado de manera exitosa."; RESULTS[zsh]="Éxito"
     else
       error "Error durante la instalación de Oh My Zsh."; RESULTS[zsh]="Error"; return 1
@@ -557,13 +557,19 @@ install_yazi() {
   header "Instalando Yazi (File Manager de Terminal)"
   if [ "$DISTRO" = "fedora" ]; then
     info "Habilitando el repositorio COPR para Yazi..."
-    if ! enable_copr_or_aur "lihaohong/yazi" && ! install_package yazi; then
-      error "Error al habilitar COPR o instalar Yazi."; RESULTS[yazi]="Error"; return 1
+    # No es fatal y va en un 'if' propio: encadenarlo con '&&' hacia el error
+    # hacía que, si el COPR se habilitaba bien, install_package nunca corriera
+    # y el paso cayera en 'Éxito' sin instalar nada.
+    if ! enable_copr_or_aur "lihaohong/yazi"; then
+      warn "No se pudo habilitar el COPR lihaohong/yazi; se intenta con los repos base."
     fi
-  else
-    if ! install_package yazi; then
-      error "Error al instalar Yazi."; RESULTS[yazi]="Error"; return 1
-    fi
+  fi
+  if ! install_package yazi; then
+    error "Error al instalar Yazi."; RESULTS[yazi]="Error"; return 1
+  fi
+  # Verificación: nunca reportar Éxito sin el binario (patrón dank/antigravity)
+  if ! command -v yazi >/dev/null 2>&1; then
+    error "El instalador terminó pero 'yazi' no se encontró."; RESULTS[yazi]="Error"; return 1
   fi
   success "Yazi instalado correctamente."; RESULTS[yazi]="Éxito"
 }
@@ -584,9 +590,12 @@ install_neovim_lazyvim() {
       fi
     fi
   else
-    info "Instalando Neovim..."
-    if ! install_package neovim; then
-      error "Error al instalar Neovim."; RESULTS[neovim]="Error"; return 1
+    info "Instalando Neovim, git, ripgrep y fd..."
+    # En Arch/CachyOS los paquetes son 'ripgrep' y 'fd' (binarios rg y fd),
+    # que necesita LazyVim/telescope. Sin ellos el paso parecía correcto pero
+    # el editor fallaba al usar la búsqueda de archivos.
+    if ! install_package neovim git ripgrep fd; then
+      error "Error al instalar Neovim o sus dependencias básicas."; RESULTS[neovim]="Error"; return 1
     fi
   fi
 
@@ -686,19 +695,18 @@ install_gemini_copilot() {
 # 9. Brave Browser
 install_brave() {
   header "Instalando Brave Browser"
-  if [ "$DISTRO" = "fedora" ]; then
-    # -o pipefail: sin él, un curl fallido deja a sh sin entrada y devuelve 0
-    if bash -o pipefail -c 'curl -fsS https://dl.brave.com/install.sh | sh'; then
+  # El instalador oficial cubre ambas distros: dnf en Fedora y pacman en
+  # CachyOS, donde Brave NO está en los repos oficiales (es AUR-only,
+  # 'brave-bin') y el script cae a un helper AUR si encuentra uno.
+  # -o pipefail: sin él, un curl fallido deja a sh sin entrada y devuelve 0.
+  if bash -o pipefail -c 'curl -fsS https://dl.brave.com/install.sh | sh'; then
+    if command -v brave-browser >/dev/null 2>&1; then
       success "Brave Browser instalado correctamente."; RESULTS[brave]="Éxito"
     else
-      error "Error al instalar Brave Browser."; RESULTS[brave]="Error"; return 1
+      error "El instalador terminó pero 'brave-browser' no se encontró."; RESULTS[brave]="Error"; return 1
     fi
   else
-    if install_package brave-browser; then
-      success "Brave instalado correctamente."; RESULTS[brave]="Éxito"
-    else
-      error "Error al instalar Brave."; RESULTS[brave]="Error"; return 1
-    fi
+    error "Error al instalar Brave Browser."; RESULTS[brave]="Error"; return 1
   fi
 }
 

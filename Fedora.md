@@ -1,18 +1,20 @@
 # Fedora
 
+# Notas manuales; el script manda (ver README).
+
 ## Parte #1
 
-sudo dnf upgrade --refresh
+sudo dnf upgrade --refresh -y
 
 ### Flatpak
 
 cd
-flatpak remote-add --if-not-exists flathub <https://dl.flathub.org/repo/flathub.flatpakrepo>
+flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 
 ### zsh && ohmyzsh
 
 cd
-dnf install zsh
+sudo dnf install -y zsh
 sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
 
 source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
@@ -21,70 +23,69 @@ source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 ### yazi
 
 cd
-dnf copr enable lihaohong/yazi
-dnf install yazi
+sudo dnf copr enable -y lihaohong/yazi
+sudo dnf install -y yazi
 
 ### nvim && lazyvim
 
 cd
-dnf install nvim
-git clone <https://github.com/LazyVim/starter> ~/.config/nvim
+sudo dnf install -y neovim git ripgrep fd-find fzf gcc make unzip
+git clone https://github.com/LazyVim/starter ~/.config/nvim
 rm -rf ~/.config/nvim/.git
 
 ### lazygit
 
 cd
-sudo dnf install --nogpgcheck --repofrompath 'terra,<https://repos.fyralabs.com/terra$releasever>' terra-release -y
-sudo dnf install lazygit -y
+sudo dnf install -y --nogpgcheck --repofrompath "terra-fyralabs,https://repos.fyralabs.com/terra$releasever" terra-release
+sudo dnf install -y lazygit
 
 ### pokemonscripts(terminal)
 
 cd
-git clone <https://gitlab.com/phoneybadger/pokemon-colorscripts.git>
+git clone https://gitlab.com/phoneybadger/pokemon-colorscripts.git
 cd pokemon-colorscripts
 sudo ./install.sh
 
 ### gemini-copilot
 
 cd
-dnf install npm nodejs
-mkdir ~/.npm-global
-npm config set prefix '~/.npm-global'
-echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.zshrc
+sudo dnf install -y nodejs npm
+mkdir -p ~/.npm-global
+npm config set prefix "$HOME/.npm-global"
+echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.zshrc
+echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.bashrc
 
 npm install -g @google/gemini-cli
 
 ### Brave
 
 cd
-curl -fsS <https://dl.brave.com/install.sh> | sh
+curl -fsS https://dl.brave.com/install.sh | sh
 
 ### Spotify
 
 cd
-flatpak install flathub com.spotify.Client
+flatpak install -y flathub com.spotify.Client
 
 ### Obsidian
 
 cd
-flatpak install flathub md.obsidian.Obsidian
+flatpak install -y flathub md.obsidian.Obsidian
 
 ## Parte #2(Opcional)
 
 ## Dank Material Shell
 
-# (interactivo: te pregunta compositor -niri/hyprland- y terminal -ghostty/kitty/alacritty-
-
-# debe correr como usuario normal, nunca como root)
-
-curl -fsSL <https://install.danklinux.com> | sh
+# (interactivo: te pregunta compositor -niri/hyprland- y terminal -ghostty/kitty/alacritty-;
+#  como tu usuario, nunca root)
+curl -fsSL https://install.danklinux.com | sh
 
 ## My configs
 
 # (respalda la config existente si la hay, en vez de borrarla)
 
 [ -e ~/.config/niri ] && mv ~/.config/niri ~/.config/niri.bak-$(date +%s)
-git clone <git@github.com>:fonta81/.BackNiriDank.git ~/.config/niri
+git clone https://github.com/fonta81/.BackNiriDank.git ~/.config/niri
 rm -rf ~/.config/niri/.git
 
 ## Config plugins ohmyzsh
@@ -93,9 +94,12 @@ sudo dnf install -y zsh-autosuggestions zsh-syntax-highlighting
 mkdir -p ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins
 ln -snf /usr/share/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
 ln -snf /usr/share/zsh-syntax-highlighting ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+# si tu plugins=( es multilinea, anade los plugins a mano
 sed -i 's/^plugins=(/plugins=(zsh-autosuggestions zsh-syntax-highlighting /' ~/.zshrc
 
 ## conf .zshrc && ghostty
 
-cp -r ./config_ghostty/config ~/.config/ghostty/
-cp -r ./.zshrc ~/
+# (respalda tu .zshrc antes; este paso lo sobrescribe y va al final)
+cp ./config_zsh/Fedora/.zshrc ~/.zshrc
+mkdir -p ~/.config/ghostty
+cp ./config_ghostty/config ~/.config/ghostty/

@@ -35,6 +35,18 @@ require_root_and_detect_user() {
     REAL_HOME="$HOME"
   fi
   [ -z "$REAL_HOME" ] && REAL_HOME="/home/$REAL_USER"
+
+  # Sin esto, ejecutar el script desde una shell de root desplegaría ~/.zshrc,
+  # la config de niri y chsh sobre /root, y 'dank' fallaría (dankinstall se
+  # niega a correr como root). Se espera './Fedora.sh' desde la sesión del usuario.
+  if [ "$REAL_USER" = "root" ]; then
+    error "Ejecutado como root: no se puede saber a qué usuario pertenecen las configs."
+    error "Ejecuta el script desde tu sesión normal (no con sudo -i):"
+    error "    ./$(basename "$0")"
+    error "Si de verdad quieres instalarlo en root, usa 'SUDO_USER=<usuario> sudo -E ./$(basename "$0")'."
+    exit 1
+  fi
+
   export REAL_USER REAL_HOME
 }
 
@@ -100,6 +112,62 @@ backup_if_exists() {
     warn "Ya existe $target, se respalda en $backup"
     run_as_user mv "$target" "$backup"
   fi
+}
+
+# Crea un directorio temporal propiedad de $REAL_USER (mktemp -d crea en root
+# con modo 700, y el usuario no podría clonar dentro). Imprime solo la ruta;
+# los avisos van a stderr para no contaminar "$(...)".
+make_tempdir() {
+  local pattern="${1:-/tmp/linux-setup.XXXXXX}"
+  local dir
+  dir=$(mktemp -d "$pattern") || return 1
+  if [ "$REAL_USER" != "root" ] && ! chown "$REAL_USER" "$dir" 2>/dev/null; then
+    warn "No se pudo cambiar el propietario de $dir a $REAL_USER." >&2
+  fi
+  printf '%s\n' "$dir"
+}
+
+# Clona <url> en <target> de forma atómica: primero a un temporal, luego
+# respaldo del destino y swap. Si el clon falla, la config existente no se toca.
+# Deja la ruta del respaldo en DEPLOY_BACKUP (vacío si no había nada que respaldar).
+declare -g DEPLOY_BACKUP=""
+deploy_clone() {
+  local url="$1" target="$2"
+  local parent; parent=$(dirname "$target")
+  local base; base=$(basename "$target")
+  local tmp inner
+  tmp=$(make_tempdir "$parent/.${base}.new.XXXXXX") || {
+    error "No se pudo crear el directorio temporal en $parent."; return 1
+  }
+  inner="$tmp/$base"
+
+  if ! run_as_user git clone "$url" "$inner"; then
+    error "Error al clonar $url."
+    rm -rf "$tmp"
+    return 1
+  fi
+  run_as_user rm -rf "$inner/.git"
+
+  DEPLOY_BACKUP=""
+  if [ -e "$target" ]; then
+    DEPLOY_BACKUP="${target}.bak-$(date +%s)"
+    warn "Ya existe $target, se respalda en $DEPLOY_BACKUP"
+    if ! run_as_user mv "$target" "$DEPLOY_BACKUP"; then
+      error "No se pudo respaldar $target. No se modifica nada."
+      rm -rf "$tmp"
+      return 1
+    fi
+  fi
+
+  if run_as_user mv "$inner" "$target"; then
+    rm -rf "$tmp"
+    return 0
+  fi
+
+  error "No se pudo colocar la config nueva en $target. Restaurando el respaldo."
+  [ -n "$DEPLOY_BACKUP" ] && run_as_user mv "$DEPLOY_BACKUP" "$target"
+  rm -rf "$tmp"
+  return 1
 }
 
 # --- Funciones visuales mejoradas (barras, spinner, cajas) ---------------------
@@ -189,27 +257,46 @@ draw_box() {
 }
 
 # --- UI genérica ------------------------------------------------------------
+# Anchos fijos: el borde no debe depender del largo del texto de estado.
+# status_w >= largo de la etiqueta de estado más larga ("Por defecto (sin
+# personalización)" = 34), si no la fila se sale de la caja.
 show_status_table() {
+  local num_w=2 label_w=35 status_w=34
+  local inner=$(( 1 + num_w + 1 + label_w + 1 + status_w + 1 ))
+  local bar; bar=$(printf '─%.0s' $(seq 1 "$inner"))
+
   echo -e "\n${BOLD}${CYAN}Estado de las Herramientas${NC}"
-  echo -e "${CYAN}╔════════════════════════════════════════════════════════════════╗${NC}"
-  printf "${CYAN}║${NC} %-60s ${CYAN}║${NC}\n" "# | Herramienta | Estado"
-  echo -e "${CYAN}╠════════════════════════════════════════════════════════════════╣${NC}"
-  
+  echo -e "${CYAN}╔${bar}╗${NC}"
+  printf "${CYAN}║${NC} %${num_w}s %-${label_w}s %-${status_w}s ${CYAN}║${NC}\n" "#" "Herramienta" "Estado"
+  echo -e "${CYAN}╠${bar}╣${NC}"
+
   local i=1
   for id in "${TOOL_ORDER[@]}"; do
     local check_fn="${TOOL_CHECK_FN[$id]}"
     local status_text="$($check_fn)"
     local label="${TOOL_LABEL[$id]}"
-    
+
     # Truncar label si es muy largo
-    if [ ${#label} -gt 35 ]; then
-      label="${label:0:32}..."
+    if [ ${#label} -gt $label_w ]; then
+      label="${label:0:$((label_w - 3))}..."
     fi
-    
-    printf "${CYAN}║${NC} %2d ${BOLD}%-35s${NC} %b ${CYAN}║${NC}\n" "$i" "$label" "$status_text"
+
+    # printf de bash cuenta bytes en el ancho de campo, no caracteres: un label
+    # con acentos ("ó") dejaría la fila 1 carácter más corta. Se rellena a mano.
+    local label_pad=$(( label_w - ${#label} ))
+    [ "$label_pad" -lt 0 ] && label_pad=0
+
+    # El texto de estado trae códigos ANSI: hay que medirlo sin ellos para padrar
+    local plain
+    plain=$(printf '%s' "$status_text" | sed 's/\x1b\[[0-9;]*m//g')
+    local pad=$(( status_w - ${#plain} ))
+    [ "$pad" -lt 0 ] && pad=0
+
+    printf "${CYAN}║${NC} %${num_w}d %b%${label_pad}s %b%${pad}s ${CYAN}║${NC}\n" \
+      "$i" "${BOLD}${label}${NC}" "" "$status_text" ""
     i=$((i + 1))
   done
-  echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}\n"
+  echo -e "${CYAN}╚${bar}╝${NC}\n"
 }
 
 show_summary() {
@@ -266,12 +353,13 @@ interactive_main_menu() {
   local title="$1"
   local options=("Todo automático" "Interactivo" "Estado" "Salir")
   local selected=0
+  local bar; bar=$(printf '─%.0s' $(seq 1 76))
   
   while true; do
     clear
-    echo -e "${CYAN}${BOLD}╔════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}${BOLD}╔${bar}╗${NC}"
     echo -e "${CYAN}║${NC}  $title"
-    echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}"
+    echo -e "${CYAN}╚${bar}╝${NC}"
     echo ""
     
     show_status_table
@@ -316,11 +404,12 @@ interactive_main_menu() {
 
 main_menu() {
   local title="$1"
+  local bar; bar=$(printf '─%.0s' $(seq 1 76))
   while true; do
     clear
-    echo -e "${CYAN}${BOLD}╔════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}${BOLD}╔${bar}╗${NC}"
     echo -e "${CYAN}║${NC}  $title"
-    echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}"
+    echo -e "${CYAN}╚${bar}╝${NC}"
     echo ""
     
     show_status_table
@@ -358,11 +447,11 @@ detect_distro() {
 # Instalar paquetes con el gestor de paquetes apropiado (dnf/pacman)
 install_package() {
   local packages=("$@")
-  if [ "$DISTRO" = "fedora" ]; then
-    dnf install -y "${packages[@]}"
-  else
-    pacman -S --noconfirm "${packages[@]}"
-  fi
+  case "$DISTRO" in
+    fedora)  dnf install -y "${packages[@]}" ;;
+    cachyos) pacman -S --noconfirm "${packages[@]}" ;;
+    *)       error "Distribución no soportada ($DISTRO): no se pueden instalar '${packages[*]}'."; return 1 ;;
+  esac
 }
 
 # Habilitar repositorio en el gestor de paquetes
@@ -432,8 +521,14 @@ install_zsh_ohmyzsh() {
   fi
 
   if command -v chsh >/dev/null 2>&1; then
-    info "Cambiando la shell predeterminada a Zsh para el usuario $REAL_USER..."
-    chsh -s "$(which zsh)" "$REAL_USER"
+    info "Cambiando la shell predeterminada de $REAL_USER a Zsh..."
+    # chsh falla (y no avisa) si zsh no está en /etc/shells: nodea el error
+    if chsh -s "$(which zsh)" "$REAL_USER"; then
+      success "Shell predeterminada de $REAL_USER: $(which zsh)"
+    else
+      warn "chsh no pudo cambiar la shell de $REAL_USER (probable: zsh no está en /etc/shells)."
+      warn "Cámbiala a mano con: chsh -s \$(which zsh) $REAL_USER"
+    fi
   else
     warn "No se pudo encontrar 'chsh'. Por favor cambia tu shell manualmente a Zsh usando: chsh -s \$(which zsh)"
   fi
@@ -443,7 +538,13 @@ install_zsh_ohmyzsh() {
     RESULTS[zsh]="Éxito (Ya existía)"
   else
     info "Instalando Oh My Zsh en modo unattended..."
-    if run_as_user sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended; then
+    # curl primero a una variable: si falla, sh -c "" sale 0 y daría un falso Éxito
+    local omz_installer
+    if ! omz_installer=$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh) \
+        || [ -z "$omz_installer" ]; then
+      error "No se pudo descargar el instalador de Oh My Zsh."; RESULTS[zsh]="Error"; return 1
+    fi
+    if run_as_user sh -c "$omz_installer" "" --unattended; then
       success "Oh My Zsh instalado de manera exitosa."; RESULTS[zsh]="Éxito"
     else
       error "Error durante la instalación de Oh My Zsh."; RESULTS[zsh]="Error"; return 1
@@ -475,6 +576,13 @@ install_neovim_lazyvim() {
     if ! install_package neovim git ripgrep fd-find; then
       error "Error al instalar Neovim o sus dependencias básicas."; RESULTS[neovim]="Error"; return 1
     fi
+    # En Fedora el binario se llama fdfind; LazyVim/mason buscan 'fd'
+    if ! command -v fd >/dev/null 2>&1 && command -v fdfind >/dev/null 2>&1; then
+      run_as_user mkdir -p "$REAL_HOME/.local/bin"
+      if run_as_user ln -snf "$(command -v fdfind)" "$REAL_HOME/.local/bin/fd"; then
+        info "Creado enlace ~/.local/bin/fd -> $(command -v fdfind) para las herramientas de Neovim."
+      fi
+    fi
   else
     info "Instalando Neovim..."
     if ! install_package neovim; then
@@ -482,17 +590,12 @@ install_neovim_lazyvim() {
     fi
   fi
 
-  if [ -d "$REAL_HOME/.config/nvim" ]; then
-    warn "Ya existe un directorio de configuración en $REAL_HOME/.config/nvim. Respaldando..."
-    backup_if_exists "$REAL_HOME/.config/nvim"
-  fi
-
   info "Clonando la plantilla starter de LazyVim..."
-  if run_as_user git clone https://github.com/LazyVim/starter "$REAL_HOME/.config/nvim"; then
-    run_as_user rm -rf "$REAL_HOME/.config/nvim/.git"
+  if deploy_clone https://github.com/LazyVim/starter "$REAL_HOME/.config/nvim"; then
     success "Neovim y LazyVim configurados de manera exitosa."; RESULTS[neovim]="Éxito"
   else
-    error "Error al clonar la plantilla de LazyVim."; RESULTS[neovim]="Error"; return 1
+    error "Error al configurar Neovim/LazyVim${DEPLOY_BACKUP:+ (respaldo previo en $DEPLOY_BACKUP)}."
+    RESULTS[neovim]="Error"; return 1
   fi
 }
 
@@ -502,7 +605,7 @@ install_lazygit() {
   if [ "$DISTRO" = "fedora" ]; then
     info "Habilitando el repositorio Terra para Lazygit..."
     if ! dnf install -y --nogpgcheck \
-        --repofrompath "terra,https://repos.fyralabs.com/terra\$releasever" \
+        --repofrompath "terra-fyralabs,https://repos.fyralabs.com/terra\$releasever" \
         terra-release; then
       error "Error al habilitar el repositorio Terra."; RESULTS[lazygit]="Error"; return 1
     fi
@@ -520,16 +623,21 @@ install_lazygit() {
 # 7. Pokemon Colorscripts
 install_pokemon_colorscripts() {
   header "Instalando Pokemon Colorscripts"
-  local temp_dir="/tmp/pokemon-colorscripts"
-  rm -rf "$temp_dir"
+  # mktemp -d evita el /tmp con nombre fijo, que otro usuario podría crear antes
+  local temp_dir; temp_dir=$(make_tempdir /tmp/pokemon-colorscripts.XXXXXX) || {
+    error "No se pudo crear el directorio temporal."; RESULTS[pokemon]="Error"; return 1
+  }
   info "Clonando repositorio..."
-  if ! run_as_user git clone https://gitlab.com/phoneybadger/pokemon-colorscripts.git "$temp_dir"; then
-    error "Error al clonar el repositorio de pokemon-colorscripts."; RESULTS[pokemon]="Error"; return 1
+  if ! run_as_user git clone https://gitlab.com/phoneybadger/pokemon-colorscripts.git "$temp_dir/repo"; then
+    error "Error al clonar el repositorio de pokemon-colorscripts."; RESULTS[pokemon]="Error"
+    rm -rf "$temp_dir"; return 1
   fi
-  if (cd "$temp_dir" && ./install.sh); then
+  # install.sh copia a /usr/local/opt y symlinkea en /usr/local/bin: necesita root
+  if (cd "$temp_dir/repo" && ./install.sh); then
     success "Pokemon Colorscripts instalado correctamente."; RESULTS[pokemon]="Éxito"
   else
-    error "Error al instalar Pokemon Colorscripts."; RESULTS[pokemon]="Error"; return 1
+    error "Error al instalar Pokemon Colorscripts."; RESULTS[pokemon]="Error"
+    rm -rf "$temp_dir"; return 1
   fi
   rm -rf "$temp_dir"
 }
@@ -579,7 +687,8 @@ install_gemini_copilot() {
 install_brave() {
   header "Instalando Brave Browser"
   if [ "$DISTRO" = "fedora" ]; then
-    if curl -fsS https://dl.brave.com/install.sh | sh; then
+    # -o pipefail: sin él, un curl fallido deja a sh sin entrada y devuelve 0
+    if bash -o pipefail -c 'curl -fsS https://dl.brave.com/install.sh | sh'; then
       success "Brave Browser instalado correctamente."; RESULTS[brave]="Éxito"
     else
       error "Error al instalar Brave Browser."; RESULTS[brave]="Error"; return 1
@@ -656,20 +765,26 @@ install_dank_shell() {
 # 13. Configs Niri
 install_configs() {
   header "Aplicando configuraciones personales"
-  backup_if_exists "$REAL_HOME/.config/niri"
-  if run_as_user git clone https://github.com/fonta81/.BackNiriDank.git "$REAL_HOME/.config/niri"; then
-    run_as_user rm -rf "$REAL_HOME/.config/niri/.git"
+  if deploy_clone https://github.com/fonta81/.BackNiriDank.git "$REAL_HOME/.config/niri"; then
     success "Configuraciones aplicadas correctamente."; RESULTS[configs]="Éxito"
   else
-    error "Error al aplicar configuraciones personales."; RESULTS[configs]="Error"; return 1
+    error "Error al aplicar configuraciones personales${DEPLOY_BACKUP:+ (respaldo previo en $DEPLOY_BACKUP)}."; RESULTS[configs]="Error"; return 1
   fi
 }
 
 # 14. Antigravity CLI
 install_antigravity() {
   header "Instalando Antigravity CLI"
-  if curl -fsSL https://antigravity.google/cli/install.sh | bash; then
-    success "Antigravity CLI instalado correctamente."; RESULTS[antigravity]="Éxito"
+  info "Se instala como $REAL_USER para que el binario 'agy' quede en su HOME."
+  # -o pipefail: sin él, un curl fallido deja a bash sin entrada y devuelve 0
+  if run_as_user bash -o pipefail -c 'curl -fsSL https://antigravity.google/cli/install.sh | bash'; then
+    # command -v del usuario real: el PATH de root no es el suyo
+    if run_as_user bash -c 'command -v agy' >/dev/null 2>&1 || [ -x "$REAL_HOME/.local/bin/agy" ]; then
+      success "Antigravity CLI instalado correctamente."; RESULTS[antigravity]="Éxito"
+    else
+      error "El instalador terminó pero 'agy' no se encontró para $REAL_USER."
+      RESULTS[antigravity]="Error"; return 1
+    fi
   else
     error "Error al instalar Antigravity CLI."; RESULTS[antigravity]="Error"; return 1
   fi
@@ -696,17 +811,30 @@ install_zsh_plugins() {
   run_as_user ln -snf "$src_auto" "$custom_plugins_dir/zsh-autosuggestions"
   run_as_user ln -snf "$src_syntax" "$custom_plugins_dir/zsh-syntax-highlighting"
 
+  local zshrc="$REAL_HOME/.zshrc"
+  [ -f "$zshrc" ] || run_as_user touch "$zshrc"
+
+  # El grep debe reconocer tanto una lista de una línea como un bloque multilínea,
+  # y el sed solo sirve en el primer caso: antes se anunciaba un "añadido" que
+  # no ocurría cuando plugins=( está en su propia línea.
+  # El carácter tras el nombre puede ser espacio, salto de línea o ')'.
+  local plugin
   for plugin in zsh-autosuggestions zsh-syntax-highlighting; do
-    if run_as_user grep -q '^plugins=(' "$REAL_HOME/.zshrc"; then
-      if ! run_as_user grep -q "plugins=.*$plugin" "$REAL_HOME/.zshrc"; then
-        run_as_user sed -i "s/^plugins=(\([^)]*\))/plugins=(\1 $plugin)/" "$REAL_HOME/.zshrc"
+    if run_as_user grep -qE "(^|[[:space:]])${plugin}([[:space:])]|$)" "$zshrc"; then
+      info "Plugin $plugin ya estaba en .zshrc."
+    elif run_as_user grep -qE '^plugins=\([[:space:]]*$' "$zshrc"; then
+      info "La lista plugins=( de $zshrc es multilínea: no se modifica automáticamente."
+      info "  Añade $plugin a mano si hace falta (el paso 'Configuración .zshrc' sobrescribe el archivo)."
+    elif run_as_user grep -q '^plugins=([^)]*)' "$zshrc"; then
+      if run_as_user sed -i "s/^plugins=(\([^)]*\))/plugins=(\1 $plugin)/" "$zshrc" \
+        && run_as_user grep -qE "(^|[[:space:]])${plugin}([[:space:])]|$)" "$zshrc"; then
         info "Plugin $plugin añadido a .zshrc."
       else
-        info "Plugin $plugin ya estaba en .zshrc."
+        warn "No se pudo añadir $plugin a la lista plugins=( de $zshrc."
       fi
     else
-      run_as_user bash -c "echo 'plugins=($plugin)' >> '$REAL_HOME/.zshrc'"
-      info "Plugins list creada en .zshrc con $plugin."
+      info "No se encontró una línea 'plugins=(...)' en $zshrc: se deja sin tocar."
+      info "  Añade $plugin a mano si hace falta (el paso 'Configuración .zshrc' sobrescribe el archivo)."
     fi
   done
   success "Plugins de Oh My Zsh configurados."; RESULTS[plugins]="Éxito"
@@ -836,7 +964,8 @@ check_dank() {
 }
 
 check_antigravity() {
-  command -v agy >/dev/null 2>&1 && echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
+  { command -v agy >/dev/null 2>&1 || [ -x "$REAL_HOME/.local/bin/agy" ]; } \
+    && echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
 }
 
 check_configs() {

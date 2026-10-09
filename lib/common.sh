@@ -730,28 +730,174 @@ install_neovim_lazyvim() {
   fi
 }
 
+# Devuelve el releasever de Fedora (44, 45, rawhide...) como texto plano.
+# NO usar 'rpm -E %releasever': %releasever es una macro de dnf, no de rpm, así
+# que rpm la devuelve sin expandir y el resultado es el literal '%releasever'.
+# VERSION_ID de /etc/os-release es lo mismo que usa dnf para $releasever.
+fedora_releasever() {
+  local v
+  v=$(sed -n 's/^VERSION_ID="\([^"]*\)".*/\1/p' /etc/os-release 2>/dev/null)
+  [ -n "$v" ] || v=$(sed -n 's/^VERSION_ID=\([^"]*\).*/\1/p' /etc/os-release 2>/dev/null)
+  printf '%s' "$v"
+}
+
+# Avisa si el reloj del sistema no está sincronizado. Terra firma el metadata
+# con una ventana de validez y un reloj atrasado hace que rpm-sequoia rechace la
+# firma por "signature is not alive / Not live until", aunque la firma sea
+# criptográficamente correcta. Solo informa: no aborta.
+warn_if_clock_unsynced() {
+  command -v timedatectl >/dev/null 2>&1 || return 0
+  local ntp
+  ntp=$(timedatectl show -p NTPSynchronized --value 2>/dev/null)
+  [ "$ntp" = "yes" ] && return 0
+  warn "El reloj del sistema no está sincronizado (NTPSynchronized=$ntp)."
+  warn "Terra verifica la firma de su metadata con este reloj: un reloj atrasado"
+  warn "la rechaza con 'signature is not alive'. Sincroniza con 'timedatectl set-ntp true'."
+}
+
+# Habilita el repositorio Terra en Fedora. Idempotente.
+# Id de repo desechable 'terra-fyralabs': --repofrompath AGREGA el repo, no
+# sobrescribe uno existente, y terra-release escribe /etc/yum.repos.d/terra.repo
+# con id 'terra'. Con el mismo id, dnf5 aborta con 'Id está presente más de una
+# vez en la configuración' en la segunda corrida.
+enable_terra_repo() {
+  local releasever
+  releasever=$(fedora_releasever)
+
+  # La llave de terra no viaja en terra-release (solo escribe terra.repo), sino
+  # en terra-gpg-keys, que vive dentro de terra: hay que instalarlo en la misma
+  # transacción --nogpgcheck que trae terra-release. Es lo que indica upstream
+  # (developer.fyralabs.com/terra/installing).
+  #
+  # repo_gpgcheck=0 apaga SOLO la verificación de la firma de repomd.xml.asc.
+  # La firma del RPM sigue verificándose contra
+  # gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-terra$releasever (gpgcheck=1 en
+  # terra.repo), así que la integridad del contenido que se instala se mantiene.
+  # Es la mitigación para los falsos rechazos de ventana de validez de rpm-sequoia.
+  #
+  # El glob '*' es obligatorio aquí, no un descuido: en la PRIMERA corrida el
+  # repo 'terra' todavía no existe (lo escribe terra-release en esta misma
+  # transacción), y dnf5 con '--setopt=terra.repo_gpgcheck=0' sobre un repo
+  # inexistente aborta con exit 2 ("No hay repositorios coincidentes para
+  # terra"). Con '*' aplica a todos los repos, que para esta transacción solo
+  # significa Terra (los repos base no traen metadata firmada de todas formas).
+  if ! dnf install -y --nogpgcheck \
+    --setopt='*.repo_gpgcheck=0' \
+    --repofrompath "terra-fyralabs,https://repos.fyralabs.com/terra\$releasever" \
+    terra-release terra-gpg-keys; then
+    error "Error al habilitar el repositorio Terra."
+    return 1
+  fi
+
+  # Reimportar la llave desde la fuente oficial evita depender de un keyring
+  # viejo en el rpmdb (generaciones anteriores de la llave de terra). No es
+  # fatal si falla: se usa la llave que terra-gpg-keys acaba de instalar.
+  if [ -n "$releasever" ]; then
+    rpm --import "https://repos.fyralabs.com/terra${releasever}/key.asc" 2>/dev/null ||
+      info "No se pudo reimportar la llave de Terra; se usará la local."
+  fi
+}
+
+# Instala Lazygit desde el release oficial de GitHub como plan B cuando el
+# paquete de Terra no está disponible (Fedora recién salida sin build, repo
+# caído, llave que no se puede validar). lazygit no publica install.sh y los
+# assets llevan la versión en el nombre, así que hay que resolver el tag desde
+# la API. Verifica sha256 contra el checksums.txt del mismo release.
+install_lazygit_binary() {
+  local arch tag ver url tmp want have
+  case "$(uname -m)" in
+  x86_64) arch="x86_64" ;;
+  aarch64 | arm64) arch="arm64" ;;
+  *)
+    error "Arquitectura sin binario oficial: $(uname -m)."
+    return 1
+    ;;
+  esac
+
+  tag=$(curl -fsSL https://api.github.com/repos/jesseduffield/lazygit/releases/latest |
+    sed -n 's/.*"tag_name":[[:space:]]*"\(v[^"]*\)".*/\1/p' | head -1)
+  if [ -z "$tag" ]; then
+    error "No se pudo resolver la última versión de Lazygit desde la API de GitHub."
+    return 1
+  fi
+  ver=${tag#v}
+  info "Descargando Lazygit $ver ($arch) desde GitHub..."
+
+  tmp=$(make_tempdir /tmp/lazygit.XXXXXX) || {
+    error "No se pudo crear el directorio temporal."
+    return 1
+  }
+
+  url="https://github.com/jesseduffield/lazygit/releases/download/${tag}/lazygit_${ver}_linux_${arch}.tar.gz"
+  if ! curl -fsSL -o "$tmp/lazygit.tar.gz" "$url"; then
+    error "No se pudo descargar $url"
+    rm -rf "$tmp"
+    return 1
+  fi
+  if ! curl -fsSL -o "$tmp/checksums.txt" \
+    "https://github.com/jesseduffield/lazygit/releases/download/${tag}/checksums.txt"; then
+    error "No se pudo descargar checksums.txt; se aborta para no instalar sin verificar."
+    rm -rf "$tmp"
+    return 1
+  fi
+
+  want=$(awk -v f="lazygit_${ver}_linux_${arch}.tar.gz" '$2 == f || $2 == "*"f { print $1 }' "$tmp/checksums.txt" | head -1)
+  have=$(sha256sum "$tmp/lazygit.tar.gz" | awk '{ print $1 }')
+  if [ -z "$want" ] || [ "$want" != "$have" ]; then
+    error "El sha256 del tarball no coincide con checksums.txt (esperado '${want:-<no encontrado>}', obtenido '$have')."
+    rm -rf "$tmp"
+    return 1
+  fi
+
+  if ! tar -xzf "$tmp/lazygit.tar.gz" -C "$tmp" lazygit; then
+    error "No se pudo extraer el binario de Lazygit."
+    rm -rf "$tmp"
+    return 1
+  fi
+  if ! install -m 755 "$tmp/lazygit" /usr/local/bin/lazygit; then
+    error "No se pudo instalar /usr/local/bin/lazygit."
+    rm -rf "$tmp"
+    return 1
+  fi
+  rm -rf "$tmp"
+}
+
 # 6. Instalar Lazygit
 install_lazygit() {
   header "Instalando Lazygit"
   if [ "$DISTRO" = "fedora" ]; then
-    # terra-release solo se instala si falta o si el repo terra no existe:
-    # reinstalarlo en cada corrida es lento e innecesario.
-    if rpm -q terra-release >/dev/null 2>&1 && dnf repolist enabled 2>/dev/null | grep -qi "terra"; then
+    warn_if_clock_unsynced
+
+    # Solo se re-habilita Terra si falta algo: el release, las llaves, el repo
+    # activo o el archivo de llave. Verificar solo el repo saltaría el
+    # 'dnf clean'/'--refresh' cuando terra-release quedó a medias.
+    if rpm -q terra-release terra-gpg-keys >/dev/null 2>&1 &&
+      [ -f "/etc/pki/rpm-gpg/RPM-GPG-KEY-terra$(fedora_releasever)" ] &&
+      dnf repolist --enabled 2>/dev/null | grep -qi "terra"; then
       info "El repositorio Terra ya está habilitado."
     else
       info "Habilitando el repositorio Terra para Lazygit..."
-      if ! dnf install -y --nogpgcheck \
-        --repofrompath "terra-fyralabs,https://repos.fyralabs.com/terra\$releasever" \
-        terra-release; then
-        error "Error al habilitar el repositorio Terra."
+      if ! enable_terra_repo; then
         RESULTS[lazygit]="Error"
         return 1
       fi
     fi
-    if ! install_package lazygit; then
-      error "Error al instalar Lazygit."
-      RESULTS[lazygit]="Error"
-      return 1
+
+    # repo_gpgcheck=0 solo para terra (ver enable_terra_repo): la firma del RPM
+    # se sigue verificando, la del metadata no. Aquí sí se puede nombrar 'terra'
+    # explícitamente porque enable_terra_repo ya se memastikan de que terra.repo
+    # existe, y dnf5 aborta con exit 2 ante un --setopt de repo inexistente.
+    if ! dnf --setopt=terra.repo_gpgcheck=0 install -y lazygit; then
+      warn "La instalación desde Terra falló; reintentando con metadata limpia."
+      dnf clean metadata
+      if ! dnf --setopt=terra.repo_gpgcheck=0 --refresh install -y lazygit; then
+        warn "Terra no entregó Lazygit; se instalará el binario oficial de GitHub."
+        install_lazygit_binary || {
+          error "Error al instalar Lazygit desde Terra y desde el release oficial."
+          RESULTS[lazygit]="Error"
+          return 1
+        }
+      fi
     fi
   else
     if ! install_package lazygit; then

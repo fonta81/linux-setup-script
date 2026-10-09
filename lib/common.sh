@@ -800,13 +800,13 @@ install_pokemon_colorscripts() {
   rm -rf "$temp_dir"
 }
 
-# 8. Gemini Copilot
-install_gemini_copilot() {
-  header "Instalando Gemini Copilot (Node.js & gemini-cli)"
+# 8. Node.js y npm
+# Helper de bajo nivel: instala el runtime y configura el prefijo global de npm.
+# No escribe RESULTS (lo usa el paso 'node' y también la dependencia de 'gemini').
+ensure_nodejs_npm() {
   info "Instalando Node.js y npm..."
   if ! install_package nodejs npm; then
     error "Error al instalar Node.js o npm."
-    RESULTS[gemini]="Error"
     return 1
   fi
 
@@ -831,6 +831,40 @@ install_gemini_copilot() {
     success "PATH agregado a .bashrc."
   else
     info "El PATH ya estaba configurado en .bashrc."
+  fi
+
+  # Verificación: nunca reportar Éxito sin el runtime (patrón yazi/lazygit).
+  # Se consulta desde root porque nodejs/npm son paquetes del sistema.
+  if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+    error "El instalador terminó pero 'node' o 'npm' no se encontraron."
+    return 1
+  fi
+}
+
+install_nodejs_npm() {
+  header "Instalando Node.js y npm"
+  if ensure_nodejs_npm; then
+    success "Node.js y npm listos (prefijo global en $REAL_HOME/.npm-global)."
+    RESULTS[node]="Éxito"
+  else
+    error "Error al instalar o configurar Node.js/npm."
+    RESULTS[node]="Error"
+    return 1
+  fi
+}
+
+# 9. Gemini Copilot
+install_gemini_copilot() {
+  header "Instalando Gemini Copilot (gemini-cli)"
+  # Dependencia: si el paso 'node' fue omitido, se instala aquí como efecto
+  # secundario. No se toca RESULTS[node] porque el usuario no aceptó ese paso.
+  if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+    warn "Node.js/npm no están instalados: se instalan como dependencia de Gemini."
+    if ! ensure_nodejs_npm; then
+      error "Sin Node.js/npm no se puede instalar gemini-cli."
+      RESULTS[gemini]="Error"
+      return 1
+    fi
   fi
 
   info "Instalando @google/gemini-cli globalmente..."
@@ -1169,6 +1203,16 @@ check_lazygit() {
 check_pokemon() {
   { command -v pokemon-colorscripts >/dev/null 2>&1 || [ -f "/usr/local/bin/pokemon-colorscripts" ]; } &&
     echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
+}
+
+check_nodejs() {
+  if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+    echo -e "${GREEN}Instalado${NC}"
+  elif command -v node >/dev/null 2>&1; then
+    echo -e "${YELLOW}Node.js (sin npm)${NC}"
+  else
+    echo -e "${RED}No instalado${NC}"
+  fi
 }
 
 check_gemini() {

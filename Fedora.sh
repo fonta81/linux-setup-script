@@ -36,6 +36,7 @@ register_tool yazi     "Yazi File Manager"           install_yazi              c
 register_tool neovim   "Neovim & LazyVim"            install_neovim_lazyvim    check_neovim
 register_tool lazygit  "Lazygit"                     install_lazygit           check_lazygit
 register_tool pokemon  "Pokemon Colorscripts"        install_pokemon_colorscripts check_pokemon
+register_tool node     "Node.js & npm"                install_nodejs_npm       check_nodejs
 register_tool gemini   "Gemini Copilot (cli)"        install_gemini_copilot   check_gemini
 register_tool brave    "Brave Browser"               install_brave             check_brave
 register_tool spotify  "Spotify (Flatpak)"           install_spotify           check_spotify

@@ -9,9 +9,9 @@ Los scripts automatizan la configuración de dieciséis (16) herramientas y cara
 1. **Actualización del Sistema**: Refresca repositorios y realiza actualizaciones del sistema (`dnf upgrade --refresh -y` en Fedora, `pacman -Syu` en CachyOS).
 2. **Flatpak y Flathub**: Instala Flatpak si falta y registra el repositorio remoto de Flathub para tu usuario (`flatpak remote-add --user --if-not-exists flathub`). Spotify/Obsidian reutilizan este paso automáticamente (`ensure_flatpak`) e instalan `--user` también.
 3. **Zsh y Oh My Zsh**: Instala `zsh`, cambia la shell por defecto con `chsh` (avisa si `zsh` no está en `/etc/shells`) e instala `oh-my-zsh` de modo desatendido (`RUNZSH=no CHSH=no KEEP_ZSHRC=yes`). El instalador se descarga primero a una variable para que un `curl` fallido nunca se reporte como éxito, y luego se canaliza a `sh -s`.
-4. **Yazi**: Gestor de archivos para terminal ultrarrápido. En Fedora habilita primero el COPR `lihaohong/yazi` (no fatal, sigue con los repos base si falla); el binario se verifica tras instalar.
-5. **Neovim y LazyVim**: Editor de texto moderno con plantilla inicial LazyVim. Instala dependencias también — Fedora: `neovim git ripgrep fd-find fzf gcc make unzip` más un enlace `~/.local/bin/fd -> fdfind` para LazyVim/Telescope; CachyOS: `neovim git ripgrep fd`. La plantilla LazyVim se clona de forma atómica con respaldo `.bak-<epoch>` si ya existe `~/.config/nvim`, conservando su `.git` para futuros `git pull`.
-6. **Lazygit**: Cliente de terminal para Git. En Fedora habilita el repositorio **Terra** (`terra-release` desde `repos.fyralabs.com`) en vez del antiguo COPR; el binario se verifica tras instalar.
+4. **Yazi**: Gestor de archivos para terminal ultrarrápido. En Fedora habilita primero el COPR `lihaohong/yazi`, omitiendo esa llamada si el COPR ya está habilitado (no fatal en ninguno de los dos casos, si falla sigue con los repos base). El binario se verifica **como tu usuario** — en tu `PATH` o en `~/.local/bin/yazi` — porque un `command -v` desde root no vería una instalación local de usuario y reportaría un fallo falso.
+5. **Neovim y LazyVim**: Editor de texto moderno con plantilla inicial LazyVim. Instala dependencias también — Fedora: `neovim git ripgrep fd-find fzf gcc make unzip`; CachyOS: `neovim git ripgrep fd`. En Fedora el paquete `fd-find` ya trae el binario `fd` que buscan LazyVim/Telescope (`fdfind` es el nombre que le da Debian), así que el enlace defensivo `~/.local/bin/fd -> fdfind` solo se crea si apareciera un `fdfind` sin ningún `fd` visible para tu usuario — en la práctica esa rama no se ejecuta. La plantilla LazyVim se clona de forma atómica con respaldo `.bak-<epoch>` si ya existe `~/.config/nvim`, conservando su `.git` para futuros `git pull`.
+6. **Lazygit**: Cliente de terminal para Git. En Fedora habilita el repositorio **Terra** (`terra-release` desde `repos.fyralabs.com`) en vez del antiguo COPR; el paquete solo se instala si falta o si el repositorio aún no está habilitado, así que las re-ejecuciones son rápidas. El binario se verifica tras instalar.
 7. **Pokemon Colorscripts**: Despliegue de sprites Pokémon en la terminal (se clona a un dir `mktemp` como tu usuario, se instala con `install.sh` como root).
 8. **Gemini Copilot**: Entorno global para Node.js y la herramienta `@google/gemini-cli`. Fija el prefijo de npm en `~/.npm-global` y lo añade al `PATH` tanto en `~/.zshrc` como en `~/.bashrc`.
 9. **Brave Browser**: Navegador web seguro vía el instalador oficial (`curl -fsS https://dl.brave.com/install.sh | sh`, con `-o pipefail`); luego se verifica `brave-browser`. En CachyOS esto importa porque Brave no está en los repos oficiales (solo AUR `brave-bin`).
@@ -20,19 +20,19 @@ Los scripts automatizan la configuración de dieciséis (16) herramientas y cara
 12. **Dank Material Shell**: Script de instalación interactivo (`dankinstall`) que pregunta por el compositor (niri/hyprland) y la terminal (ghostty/kitty/alacritty) antes de configurar los motores de temas y layouts. Corre como tu usuario, nunca como root, con `-o pipefail`. Se omite si `dms` ya está instalado; los logs quedan en `/tmp/dankinstall-*.log`. Debe ejecutarse **antes** de `configs` y `zshrc` (crea el tema `dankcolors` de Ghostty que esos pasos usan).
 13. **Antigravity CLI**: Instala la herramienta de línea de comandos Antigravity de Google como tu usuario (`agy` queda en tu `HOME`, verificado en el `PATH` o en `~/.local/bin/agy`).
 14. **Configuraciones de Niri**: Clona `https://github.com/fonta81/.BackNiriDank.git` en `~/.config/niri` de forma atómica (si el clon falla no se toca tu config actual) con respaldo `.bak-<epoch>`. Si ya existe una config de Niri (p. ej. creada por DMS), pide confirmación `[s/N]` antes. El clon conserva su `.git` para futuros `git pull`.
-15. **Plugins de Zsh**: Instalación e integración automática de `zsh-autosuggestions` y `zsh-syntax-highlighting` desde los paquetes de la distro (`/usr/share/...` en Fedora, `/usr/share/zsh/plugins/...` en Arch) creando un puente `<nombre>.plugin.zsh` en `~/.oh-my-zsh/custom/plugins` que hace `source` al archivo del sistema (un simple symlink al directorio del sistema nunca carga en OMZ). Un bloque `plugins=(` multilínea se deja sin tocar con un aviso; de todos modos el siguiente paso sobrescribe `~/.zshrc`.
+15. **Plugins de Zsh**: Instalación e integración automática de `zsh-autosuggestions` y `zsh-syntax-highlighting` desde los paquetes de la distro (`/usr/share/...` en Fedora, `/usr/share/zsh/plugins/...` en Arch) creando un puente `<nombre>.plugin.zsh` en `~/.oh-my-zsh/custom/plugins` que hace `source` al archivo del sistema (un simple symlink al directorio del sistema nunca carga en OMZ). Un puente o clon que este script **no** generó — p. ej. tu propio clon git del upstream con su propio `.plugin.zsh` — se detecta y se deja en su sitio en lugar de sobrescribirse. Un bloque `plugins=(` multilínea se deja sin tocar con un aviso; de todos modos el siguiente paso sobrescribe `~/.zshrc`.
 16. **`.zshrc` Personalizado y Ghostty**: Aplica un perfil de Zsh optimizado con alias y variables de entorno preconfiguradas, además del config de la terminal Ghostty en `~/.config/ghostty`. Este paso va al final porque sobrescribe `~/.zshrc`; el perfil depende de la distribución (`config_zsh/Fedora/.zshrc` o `config_zsh/Cachyos/.zshrc`), ya incluye ambos plugins y agrega `~/.local/bin` (`fd`, `agy`) al `PATH`. Los archivos existentes se respaldan (`.zshrc.bak.<fecha>` y `.bak-<epoch>` para Ghostty).
 
 ---
 
 ## Prerrequisitos
 
-- `git` y `curl`. En Fedora, el script además instala sus prerrequisitos básicos (`git`, `curl`, `util-linux-user` para `chsh`) al arrancar (los fallos quedan en `/tmp/linux-setup-prereq.log`); en CachyOS asegura `git` y `curl` vía pacman.
+- `git` y `curl`. En Fedora, el script además instala sus prerrequisitos básicos (`git`, `curl`, `util-linux-user` para `chsh`) al arrancar; en CachyOS asegura `git` y `curl` vía pacman. Si ese paso falla, el script continúa e imprime las primeras 20 líneas del log de fallo en `/tmp/linux-setup-prereq.log`.
 - Cada entrypoint solo corre en su distro (Fedora.sh aborta fuera de Fedora, Cachyos.sh fuera de CachyOS).
 
 ## Uso
 
-Ejecuta el script correspondiente a tu distribución de Linux. `sudo` es opcional: los scripts detectan si no son root y se re-ejecutan con `sudo` automáticamente.
+Ejecuta el script correspondiente a tu distribución de Linux. `sudo` es opcional: los scripts detectan si no son root y se re-ejecutan con `sudo` automáticamente. La re-ejecución preserva el intérprete (`sudo bash "$0"`), así que `./Fedora.sh` y `bash Fedora.sh` son equivalentes — no hace falta el bit de ejecución.
 
 Lánzalos desde tu sesión normal de usuario — no desde una shell de root (`sudo -i`) — para que las configs caigan en tu home y no en `/root`. Ejecutado como root puro aborta con error; si de verdad lo necesitas, usa `SUDO_USER=<usuario> sudo -E ./Fedora.sh`.
 
@@ -64,7 +64,7 @@ Después de **Todo automático** e **Interactivo** se muestra un resumen de oper
 
 ## Respaldos
 
-Las configs sobrescritas nunca se borran en silencio: Niri, Neovim y Ghostty guardan copias `.bak-<epoch>`, y `.zshrc` guarda una copia `.zshrc.bak.<fecha>`. Los clones se despliegan de forma atómica — si el clon falla, la config existente no se toca.
+Las configs sobrescritas nunca se borran en silencio: Niri, Neovim y Ghostty guardan copias `.bak-<epoch>`, y `.zshrc` guarda una copia `.zshrc.bak.<fecha>`. Los clones se despliegan de forma atómica — si el clon falla, la config existente no se toca. Los directorios padre que falten (p. ej. `~/.config` en una cuenta nueva) se crean primero como tu usuario, y un `Ctrl-C` en la ventana entre el respaldo y el swap final devuelve el respaldo a su sitio.
 
 ## Estructura del Repositorio
 
@@ -76,7 +76,7 @@ Las configs sobrescritas nunca se borran en silencio: Niri, Neovim y Ghostty gua
 ## Verificar Cambios
 
 ```bash
-bash -n Fedora.sh Cachyos.sh lib/common.sh
+bash -n Fedora.sh Cachyos.sh lib/common.sh config_zsh/Fedora/.zshrc config_zsh/Cachyos/.zshrc
 ```
 
 Esa es la única comprobación segura (no hay tests ni linters instalados). No ejecutes los instaladores para "probar" — actualizan el sistema, ejecutan `chsh` y sobrescriben `~/.zshrc`.

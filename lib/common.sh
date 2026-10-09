@@ -518,10 +518,10 @@ install_package() {
   esac
 }
 
-# Habilitar repositorio en el gestor de paquetes
+# Habilitar repositorio en el gestor de paquetes (solo Fedora; fuera de
+# Fedora no hace nada y devuelve 0)
 enable_copr_or_aur() {
   local repo="$1"
-  local distro_repo="$2"
   if [ "$DISTRO" = "fedora" ]; then
     dnf copr enable -y "$repo"
   else
@@ -644,6 +644,15 @@ install_zsh_ohmyzsh() {
   fi
 }
 
+# Detección compartida de Yazi: sirve para la verificación tras instalar y
+# para check_yazi. Se consulta como el usuario real, porque desde root un
+# 'command -v yazi' no ve un Yazi en ~/.local/bin (patrón dms_installed).
+yazi_installed() {
+  command -v yazi >/dev/null 2>&1 ||
+    run_as_user bash -c 'command -v yazi' >/dev/null 2>&1 ||
+    [ -x "$REAL_HOME/.local/bin/yazi" ]
+}
+
 # 4. Instalar Yazi
 install_yazi() {
   header "Instalando Yazi (File Manager de Terminal)"
@@ -663,8 +672,8 @@ install_yazi() {
     return 1
   fi
   # Verificación: nunca reportar Éxito sin el binario (patrón dank/antigravity)
-  if ! command -v yazi >/dev/null 2>&1; then
-    error "El instalador terminó pero 'yazi' no se encontró."
+  if ! yazi_installed; then
+    error "El instalador terminó pero 'yazi' no se encontró para $REAL_USER."
     RESULTS[yazi]="Error"
     return 1
   fi
@@ -1140,7 +1149,7 @@ check_zsh() {
 }
 
 check_yazi() {
-  command -v yazi >/dev/null 2>&1 && echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
+  yazi_installed && echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
 }
 
 check_neovim() {

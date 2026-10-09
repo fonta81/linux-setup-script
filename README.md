@@ -50,7 +50,7 @@ Launch them from your normal user session — not from a root shell (`sudo -i`) 
 ### Execution Modes
 When running either script, a status table is shown first, then you can choose from:
 1. **Todo automático (All Automatic):** Sequentially executes all 16 configuration steps; the Dank Material Shell step pauses (interactive `dankinstall` prompts), and the Niri step asks for `[s/N]` confirmation if a config already exists.
-2. **Interactivo (Interactive Selection):** Prompts for `[s/N]` confirmation (`s` = yes) before executing each step.
+2. **Interactivo (Interactive Selection):** Prompts for `[s/N/a]` confirmation (`s` = yes, `a` = yes and install everything that remains without asking again) before executing each step. "Yes to all" does not affect the internal prompts: Niri still asks for `[s/N]` confirmation if a config already exists, and `dankinstall` is still interactive.
 3. **Estado (Check Status):** Displays a clean CLI status table identifying which tools are already present on the system.
 4. **Salir (Exit):** Clean exit.
 

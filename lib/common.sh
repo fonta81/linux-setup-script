@@ -376,14 +376,27 @@ install_all() {
 }
 
 install_interactive() {
+  # 'a' (sí a todo) vive solo aquí: el flag es local, así que una vuelta
+  # siguiente al menú vuelve a preguntar. No afecta a las preguntas internas
+  # de install_configs (Niri) ni a dankinstall.
+  local auto="" val
   for id in "${TOOL_ORDER[@]}"; do
-    echo -en "¿Instalar ${TOOL_LABEL[$id]}? [s/N]: "
-    read -r val
-    if [[ "$val" =~ ^[sS]$ ]]; then
+    if [[ -n "$auto" ]]; then
+      echo -e "¿Instalar ${TOOL_LABEL[$id]}? ${BOLD}a${NC} (sí a todo)"
       "${TOOL_INSTALL_FN[$id]}"
-    else
-      RESULTS["$id"]="Omitido"
+      continue
     fi
+    echo -en "¿Instalar ${TOOL_LABEL[$id]}? [s/N/a]: "
+    read -r val
+    case "$val" in
+    s | S) "${TOOL_INSTALL_FN[$id]}" ;;
+    a | A)
+      auto=1
+      info "Sí a todo activado: los pasos restantes se instalarán sin preguntar."
+      "${TOOL_INSTALL_FN[$id]}"
+      ;;
+    *) RESULTS["$id"]="Omitido" ;;
+    esac
   done
   clear
   show_summary

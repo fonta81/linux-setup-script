@@ -50,7 +50,7 @@ Lánzalos desde tu sesión normal de usuario — no desde una shell de root (`su
 ### Modos de Ejecución
 Al iniciar cualquiera de los scripts se muestra primero la tabla de estado y después un menú interactivo con las siguientes opciones:
 1. **Todo automático:** Ejecuta secuencialmente los 16 pasos; el paso de Dank Material Shell se pausa (preguntas interactivas de `dankinstall`), y el de Niri pide confirmación `[s/N]` si ya existe una config.
-2. **Interactivo:** Solicita confirmación `[s/N]` (`s` = sí) antes de ejecutar cada paso.
+2. **Interactivo:** Solicita confirmación `[s/N/a]` (`s` = sí, `a` = sí e instala todo lo que resta sin volver a preguntar) antes de ejecutar cada paso. El sí a todo no afecta a las preguntas internas: Niri sigue pidiendo confirmación `[s/N]` si ya existe una config, y `dankinstall` sigue siendo interactivo.
 3. **Estado:** Muestra una tabla estructurada indicando qué herramientas ya están presentes o configuradas en el sistema.
 4. **Salir:** Salida limpia del instalador.
 

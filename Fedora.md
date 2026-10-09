@@ -35,8 +35,15 @@ git clone https://github.com/LazyVim/starter ~/.config/nvim
 ### lazygit
 
 cd
-sudo dnf install -y --nogpgcheck --repofrompath "terra-fyralabs,https://repos.fyralabs.com/terra$releasever" terra-release
-sudo dnf install -y lazygit
+# terra-gpg-keys va en la misma transacción: terra-release solo escribe
+# terra.repo (gpgcheck=1, gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-terra$releasever)
+# y la llave vive en terra-gpg-keys, que está dentro de terra.
+# repo_gpgcheck=0 solo para terra: apaga la firma de repomd.xml.asc, la del RPM
+# sigue verificándose.
+sudo dnf install -y --nogpgcheck --setopt=terra.repo_gpgcheck=0 \
+  --repofrompath "terra-fyralabs,https://repos.fyralabs.com/terra$releasever" \
+  terra-release terra-gpg-keys
+sudo dnf --setopt=terra.repo_gpgcheck=0 install -y lazygit
 
 ### pokemonscripts(terminal)
 

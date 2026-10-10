@@ -1039,6 +1039,172 @@ install_gemini_copilot() {
   fi
 }
 
+# 10. Copilot CLI
+install_copilot_cli() {
+  header "Instalando Copilot CLI"
+  info "Descargando el instalador oficial (https://gh.io/copilot-install)..."
+  # -o pipefail: sin él, un curl fallido deja a bash sin entrada y devuelve 0.
+  # Se ejecuta como root para que el script instale en /usr/local/bin
+  # (su modo '| sudo bash' documentado); así queda visible para todos.
+  if ! bash -o pipefail -c 'curl -fsSL https://gh.io/copilot-install | bash'; then
+    error "Error al instalar Copilot CLI."
+    RESULTS[copilot]="Error"
+    return 1
+  fi
+  # Verificación: nunca reportar Éxito sin el binario (patrón yazi/lazygit).
+  if ! command -v copilot >/dev/null 2>&1; then
+    error "El instalador terminó pero 'copilot' no se encontró."
+    RESULTS[copilot]="Error"
+    return 1
+  fi
+  success "Copilot CLI instalado correctamente."
+  RESULTS[copilot]="Éxito"
+}
+
+# 11. Repomix
+install_repomix() {
+  header "Instalando Repomix"
+  # Dependencia: si el paso 'node' fue omitido, se instala aquí como efecto
+  # secundario. No se toca RESULTS[node] porque el usuario no aceptó ese paso.
+  if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+    warn "Node.js/npm no están instalados: se instalan como dependencia de Repomix."
+    if ! ensure_nodejs_npm; then
+      error "Sin Node.js/npm no se puede instalar repomix."
+      RESULTS[repomix]="Error"
+      return 1
+    fi
+  fi
+
+  info "Instalando repomix globalmente..."
+  if run_as_user npm install -g repomix; then
+    if run_as_user bash -c 'command -v repomix' >/dev/null 2>&1 || [ -x "$REAL_HOME/.npm-global/bin/repomix" ]; then
+      success "Repomix instalado correctamente."
+      warn "Nota: Recuerda reiniciar la terminal o ejecutar 'source ~/.zshrc' para poder usar el comando 'repomix'."
+      RESULTS[repomix]="Éxito"
+    else
+      error "npm terminó pero 'repomix' no se encontró para $REAL_USER."
+      RESULTS[repomix]="Error"
+      return 1
+    fi
+  else
+    error "Error al instalar el paquete repomix de forma global."
+    RESULTS[repomix]="Error"
+    return 1
+  fi
+}
+
+# 12. LazySSH
+install_lazyssh() {
+  header "Instalando LazySSH"
+  local arch tag url tmp want have
+  case "$(uname -m)" in
+  x86_64) arch="x86_64" ;;
+  aarch64 | arm64) arch="arm64" ;;
+  *)
+    error "Arquitectura sin binario oficial: $(uname -m)."
+    RESULTS[lazyssh]="Error"
+    return 1
+    ;;
+  esac
+
+  tag=$(curl -fsSL https://api.github.com/repos/Adembc/lazyssh/releases/latest |
+    sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+  if [ -z "$tag" ]; then
+    error "No se pudo resolver la última versión de LazySSH desde la API de GitHub."
+    RESULTS[lazyssh]="Error"
+    return 1
+  fi
+  info "Descargando LazySSH $tag ($arch) desde GitHub..."
+
+  tmp=$(make_tempdir /tmp/lazyssh.XXXXXX) || {
+    error "No se pudo crear el directorio temporal."
+    RESULTS[lazyssh]="Error"
+    return 1
+  }
+
+  url="https://github.com/Adembc/lazyssh/releases/download/${tag}/lazyssh_Linux_${arch}.tar.gz"
+  if ! curl -fsSL -o "$tmp/lazyssh.tar.gz" "$url"; then
+    error "No se pudo descargar $url"
+    rm -rf "$tmp"
+    RESULTS[lazyssh]="Error"
+    return 1
+  fi
+  if ! curl -fsSL -o "$tmp/checksums.txt" \
+    "https://github.com/Adembc/lazyssh/releases/download/${tag}/checksums.txt"; then
+    error "No se pudo descargar checksums.txt; se aborta para no instalar sin verificar."
+    rm -rf "$tmp"
+    RESULTS[lazyssh]="Error"
+    return 1
+  fi
+
+  want=$(awk -v f="lazyssh_Linux_${arch}.tar.gz" '$2 == f || $2 == "*"f { print $1 }' "$tmp/checksums.txt" | head -1)
+  have=$(sha256sum "$tmp/lazyssh.tar.gz" | awk '{ print $1 }')
+  if [ -z "$want" ] || [ "$want" != "$have" ]; then
+    error "El sha256 del tarball no coincide con checksums.txt (esperado '${want:-<no encontrado>}', obtenido '$have')."
+    rm -rf "$tmp"
+    RESULTS[lazyssh]="Error"
+    return 1
+  fi
+
+  if ! tar -xzf "$tmp/lazyssh.tar.gz" -C "$tmp" lazyssh; then
+    error "No se pudo extraer el binario de LazySSH."
+    rm -rf "$tmp"
+    RESULTS[lazyssh]="Error"
+    return 1
+  fi
+  if ! install -m 755 "$tmp/lazyssh" /usr/local/bin/lazyssh; then
+    error "No se pudo instalar /usr/local/bin/lazyssh."
+    rm -rf "$tmp"
+    RESULTS[lazyssh]="Error"
+    return 1
+  fi
+  rm -rf "$tmp"
+
+  if ! command -v lazyssh >/dev/null 2>&1; then
+    error "El instalador terminó pero 'lazyssh' no se encontró."
+    RESULTS[lazyssh]="Error"
+    return 1
+  fi
+  success "LazySSH instalado correctamente."
+  RESULTS[lazyssh]="Éxito"
+}
+
+# 13. Lavat
+install_lavat() {
+  header "Instalando Lavat (lava lamp en la terminal)"
+  info "Instalando dependencias de compilación (gcc, make)..."
+  if ! install_package gcc make; then
+    error "Error al instalar gcc/make."
+    RESULTS[lavat]="Error"
+    return 1
+  fi
+
+  local tmp
+  tmp=$(make_tempdir /tmp/lavat.XXXXXX) || {
+    error "No se pudo crear el directorio temporal."
+    RESULTS[lavat]="Error"
+    return 1
+  }
+  info "Clonando repositorio..."
+  if ! run_as_user git clone https://github.com/AngelJumbo/lavat.git "$tmp/repo"; then
+    error "Error al clonar el repositorio de lavat."
+    rm -rf "$tmp"
+    RESULTS[lavat]="Error"
+    return 1
+  fi
+  # make install escribe en /usr/local/bin: necesita root.
+  if (cd "$tmp/repo" && make && make install); then
+    success "Lavat instalado correctamente."
+    RESULTS[lavat]="Éxito"
+  else
+    error "Error al compilar o instalar Lavat."
+    rm -rf "$tmp"
+    RESULTS[lavat]="Error"
+    return 1
+  fi
+  rm -rf "$tmp"
+}
+
 # 9. Brave Browser
 install_brave() {
   header "Instalando Brave Browser"
@@ -1393,6 +1559,26 @@ check_nodejs() {
 
 check_gemini() {
   { [ -f "$REAL_HOME/.npm-global/bin/gemini" ] || command -v gemini >/dev/null 2>&1; } &&
+    echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
+}
+
+check_copilot() {
+  command -v copilot >/dev/null 2>&1 &&
+    echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
+}
+
+check_repomix() {
+  { [ -f "$REAL_HOME/.npm-global/bin/repomix" ] || command -v repomix >/dev/null 2>&1; } &&
+    echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
+}
+
+check_lazyssh() {
+  command -v lazyssh >/dev/null 2>&1 &&
+    echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
+}
+
+check_lavat() {
+  command -v lavat >/dev/null 2>&1 &&
     echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
 }
 

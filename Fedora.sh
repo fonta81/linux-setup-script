@@ -38,6 +38,10 @@ register_tool lazygit  "Lazygit"                     install_lazygit           c
 register_tool pokemon  "Pokemon Colorscripts"        install_pokemon_colorscripts check_pokemon
 register_tool node     "Node.js & npm"                install_nodejs_npm       check_nodejs
 register_tool gemini   "Gemini Copilot (cli)"        install_gemini_copilot   check_gemini
+register_tool copilot  "Copilot CLI"                 install_copilot_cli      check_copilot
+register_tool repomix  "Repomix"                     install_repomix          check_repomix
+register_tool lazyssh  "LazySSH"                     install_lazyssh          check_lazyssh
+register_tool lavat    "Lavat"                       install_lavat            check_lavat
 register_tool brave    "Brave Browser"               install_brave             check_brave
 register_tool spotify  "Spotify (Flatpak)"           install_spotify           check_spotify
 register_tool obsidian "Obsidian (Flatpak)"          install_obsidian          check_obsidian

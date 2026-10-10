@@ -581,7 +581,7 @@ install_flatpak() {
       return 1
     fi
   elif [ "$DISTRO" = "cachyos" ]; then
-    if ! pacman -S --noconfirm flatpak; then
+    if ! install_package flatpak; then
       error "Error al instalar Flatpak."
       RESULTS[flatpak]="Error"
       return 1
@@ -721,11 +721,12 @@ install_neovim_lazyvim() {
       fi
     fi
   else
-    info "Instalando Neovim, git, ripgrep y fd..."
+    info "Instalando Neovim, git, ripgrep, fd y dependencias de LazyVim (fzf, gcc, make, unzip)..."
     # En Arch/CachyOS los paquetes son 'ripgrep' y 'fd' (binarios rg y fd),
     # que necesita LazyVim/telescope. Sin ellos el paso parecía correcto pero
-    # el editor fallaba al usar la búsqueda de archivos.
-    if ! install_package neovim git ripgrep fd; then
+    # el editor fallaba al usar la búsqueda de archivos. gcc/make/unzip/fzf
+    # los exigen treesitter y otros plugins (igual que en Fedora).
+    if ! install_package neovim git ripgrep fd fzf gcc make unzip; then
       error "Error al instalar Neovim o sus dependencias básicas."
       RESULTS[neovim]="Error"
       return 1
@@ -1041,21 +1042,37 @@ install_gemini_copilot() {
 # 9. Brave Browser
 install_brave() {
   header "Instalando Brave Browser"
-  # El instalador oficial cubre ambas distros: dnf en Fedora y pacman en
-  # CachyOS, donde Brave NO está en los repos oficiales (es AUR-only,
-  # 'brave-bin') y el script cae a un helper AUR si encuentra uno.
-  # -o pipefail: sin él, un curl fallido deja a sh sin entrada y devuelve 0.
-  if bash -o pipefail -c 'curl -fsS https://dl.brave.com/install.sh | sh'; then
-    if command -v brave-browser >/dev/null 2>&1; then
-      success "Brave Browser instalado correctamente."
-      RESULTS[brave]="Éxito"
+  if [ "$DISTRO" = "cachyos" ]; then
+    # CachyOS trae chaotic-aur por defecto con 'brave-bin' precompilado
+    # (también en el repo propio cachyos): no hace falta helper AUR.
+    # Nota: el paquete de repo puede ir alguna versión por detrás del upstream.
+    if install_package brave-bin; then
+      info "Brave instalado desde los repositorios (brave-bin)."
     else
-      error "El instalador terminó pero 'brave-browser' no se encontró."
+      warn "No se pudo instalar brave-bin desde los repos; probando el instalador oficial..."
+      # -o pipefail: sin él, un curl fallido deja a sh sin entrada y devuelve 0.
+      if ! bash -o pipefail -c 'curl -fsS https://dl.brave.com/install.sh | sh'; then
+        error "Error al instalar Brave Browser."
+        RESULTS[brave]="Error"
+        return 1
+      fi
+    fi
+  else
+    # Fedora: el instalador oficial configura el repo dnf de Brave.
+    # -o pipefail: sin él, un curl fallido deja a sh sin entrada y devuelve 0.
+    if ! bash -o pipefail -c 'curl -fsS https://dl.brave.com/install.sh | sh'; then
+      error "Error al instalar Brave Browser."
       RESULTS[brave]="Error"
       return 1
     fi
+  fi
+  # brave-bin puede exponer 'brave' en vez de 'brave-browser': se acepta
+  # cualquiera de los dos (patrón yazi/lazygit/antigravity: sin binario no hay Éxito).
+  if command -v brave-browser >/dev/null 2>&1 || command -v brave >/dev/null 2>&1; then
+    success "Brave Browser instalado correctamente."
+    RESULTS[brave]="Éxito"
   else
-    error "Error al instalar Brave Browser."
+    error "El instalador terminó pero no se encontró 'brave-browser' ni 'brave'."
     RESULTS[brave]="Error"
     return 1
   fi
@@ -1380,7 +1397,9 @@ check_gemini() {
 }
 
 check_brave() {
-  command -v brave-browser >/dev/null 2>&1 && echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
+  # brave-bin puede exponer 'brave' en vez de 'brave-browser' (ver install_brave).
+  { command -v brave-browser >/dev/null 2>&1 || command -v brave >/dev/null 2>&1; } &&
+    echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
 }
 
 check_spotify() {

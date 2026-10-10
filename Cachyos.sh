@@ -19,8 +19,10 @@ if [ "${DISTRO:-unknown}" != "cachyos" ]; then
 fi
 
 info "Comprobando requisitos básicos (git, curl)..."
-prereq_log="/tmp/linux-setup-prereq.log"
-if ! pacman -Sy --needed git curl >"$prereq_log" 2>&1; then
+# -Syu y no -Sy a secas: en Arch un -Sy sin -u deja un partial upgrade
+# (paquetes nuevos contra librerías viejas) si la máquina iba desactualizada.
+prereq_log=$(mktemp /tmp/linux-setup-prereq.XXXXXX.log 2>/dev/null) || prereq_log="/tmp/linux-setup-prereq.log"
+if ! pacman -Syu --needed git curl >"$prereq_log" 2>&1; then
   warn "No se pudieron instalar todos los prerrequisitos iniciales. El script intentará continuar."
   warn "Detalle del fallo en $prereq_log:"
   sed -n '1,20p' "$prereq_log" | while IFS= read -r line; do warn "  $line"; done

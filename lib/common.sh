@@ -82,17 +82,6 @@ register_tool() {
   RESULTS["$id"]="No ejecutado"
 }
 
-# Helper genérico de estado: comando + args opcionales
-# Uso: check_command_exists nvim
-check_command_exists() {
-  command -v "$1" >/dev/null 2>&1 && echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No${NC}"
-}
-
-check_flatpak_app() {
-  command -v flatpak >/dev/null 2>&1 && flatpak list | grep -q "$1" &&
-    echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No${NC}"
-}
-
 check_dir_exists() {
   [ -d "$1" ] && echo -e "${GREEN}Configurado${NC}" || echo -e "${RED}No${NC}"
 }
@@ -208,92 +197,6 @@ deploy_clone() {
   return 1
 }
 
-# --- Funciones visuales mejoradas (barras, spinner, cajas) ---------------------
-
-# Barra de progreso animada - Uso: progress_bar "Instalando paquete" 5
-progress_bar() {
-  local label="$1"
-  local seconds="${2:-3}"
-  local width=30
-  local iterations=$((seconds * 4))
-
-  printf "%s " "$label"
-  for ((i = 0; i < iterations; i++)); do
-    local percent=$((i * 100 / iterations))
-    local filled=$((percent * width / 100))
-    local empty=$((width - filled))
-
-    printf "\r%s [" "$label"
-    printf "%${filled}s" | tr ' ' '='
-    printf "%${empty}s" | tr ' ' '-'
-    printf "] %d%%" "$percent"
-    sleep 0.25
-  done
-  printf "\r%s [" "$label"
-  printf "%${width}s" | tr ' ' '='
-  printf "] 100%%\n"
-}
-
-# Spinner animado - Uso: run_with_spinner "comando" "Mensaje"
-run_with_spinner() {
-  local cmd="$1"
-  local msg="${2:-Procesando}"
-  local spinners=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
-  local i=0
-
-  # Ejecutar comando en background
-  eval "$cmd" &
-  local pid=$!
-
-  while kill -0 $pid 2>/dev/null; do
-    printf "\r${CYAN}${spinners[$i]}${NC} $msg"
-    i=$(((i + 1) % ${#spinners[@]}))
-    sleep 0.1
-  done
-
-  wait $pid
-  local exit_code=$?
-  printf "\r${GREEN}✓${NC} $msg\n"
-  return $exit_code
-}
-
-# Dibujar una caja/panel - Uso: draw_box "Título" "Contenido línea 1" "Contenido línea 2"
-draw_box() {
-  local title="$1"
-  shift
-  local lines=("$@")
-  local max_width=0
-
-  # Encontrar ancho máximo
-  max_width=${#title}
-  for line in "${lines[@]}"; do
-    if [ ${#line} -gt $max_width ]; then
-      max_width=${#line}
-    fi
-  done
-  max_width=$((max_width + 4))
-
-  # Dibujar caja
-  printf "┌─"
-  printf '─%.0s' $(seq 1 $max_width)
-  printf "─┐\n"
-
-  if [ -n "$title" ]; then
-    printf "│ ${BOLD}%-${max_width}s${NC} │\n" "$title"
-    printf "├─"
-    printf '─%.0s' $(seq 1 $max_width)
-    printf "─┤\n"
-  fi
-
-  for line in "${lines[@]}"; do
-    printf "│ %-${max_width}s │\n" "$line"
-  done
-
-  printf "└─"
-  printf '─%.0s' $(seq 1 $max_width)
-  printf "─┘\n"
-}
-
 # --- UI genérica ------------------------------------------------------------
 # Anchos fijos: el borde no debe depender del largo del texto de estado.
 # status_w >= largo de la etiqueta de estado más larga ("Por defecto (sin
@@ -400,70 +303,6 @@ install_interactive() {
   done
   clear
   show_summary
-}
-
-# Menú interactivo con navegación por flechas (fallback a números)
-interactive_main_menu() {
-  local title="$1"
-  local options=("Todo automático" "Interactivo" "Estado" "Salir")
-  local selected=0
-  local bar
-  bar=$(printf '─%.0s' $(seq 1 76))
-
-  while true; do
-    clear
-    echo -e "${CYAN}${BOLD}╔${bar}╗${NC}"
-    echo -e "${CYAN}║${NC}  $title"
-    echo -e "${CYAN}╚${bar}╝${NC}"
-    echo ""
-
-    show_status_table
-
-    echo -e "${BOLD}Opciones:${NC}"
-    for i in "${!options[@]}"; do
-      if [ "$i" -eq "$selected" ]; then
-        echo -e "  ${CYAN}${BOLD}➤ $((i + 1)). ${options[$i]}${NC}"
-      else
-        echo -e "    $((i + 1)). ${options[$i]}"
-      fi
-    done
-
-    echo ""
-    echo -e "${BOLD}Usa ↑/↓ para navegar, Enter para seleccionar, o escribe número (1-4):${NC}"
-
-    # Leer input - soportar flechas y números
-    read -rsn 1 input
-
-    if [[ "$input" == "" ]]; then
-      read -rsn 2 input # Leer secuencia de flecha
-    fi
-
-    case "$input" in
-    A) selected=$(((selected - 1 + ${#options[@]}) % ${#options[@]})) ;;
-    B) selected=$(((selected + 1) % ${#options[@]})) ;;
-    1) selected=0 ;;
-    2) selected=1 ;;
-    3) selected=2 ;;
-    4) selected=3 ;;
-    "") # Enter presionado
-      case $selected in
-      0)
-        install_all
-        read -p "Presiona Enter para continuar..."
-        ;;
-      1)
-        install_interactive
-        read -p "Presiona Enter para continuar..."
-        ;;
-      2)
-        show_status_table
-        read -p "Presiona Enter para continuar..."
-        ;;
-      3) exit 0 ;;
-      esac
-      ;;
-    esac
-  done
 }
 
 main_menu() {

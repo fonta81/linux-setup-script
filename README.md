@@ -74,7 +74,7 @@ Overwritten configs are never deleted silently: Niri, Neovim and Ghostty keep `.
 ## Repository Layout
 
 - `Fedora.sh`, `Cachyos.sh` — entrypoints only: they source `lib/common.sh`, ensure root/user detection, register the 21 tools, and open the menu.
-- `lib/common.sh` — all shared logic (menus, `install_*`/`check_*`, distro helpers). Sourced, never executed directly.
+- `lib/common.sh` — all shared logic (menus, `install_*`/`check_*`, distro helpers, plus the shared `install_github_tarball`, `ensure_node_for`/`npm_install_global` and `install_flatpak_app` helpers). Sourced, never executed directly.
 - `config_zsh/Fedora/.zshrc`, `config_zsh/Cachyos/.zshrc`, `config_ghostty/config` — payloads copied into the target user's home by the `zshrc` step.
 - `Fedora.md` / `Cachyos.md` — manual step-by-step notes; they can lag the scripts, so the scripts take precedence.
 

@@ -74,7 +74,7 @@ Las configs sobrescritas nunca se borran en silencio: Niri, Neovim y Ghostty gua
 ## Estructura del Repositorio
 
 - `Fedora.sh`, `Cachyos.sh` — solo puntos de entrada: cargan `lib/common.sh`, aseguran la detección root/usuario, registran las 21 herramientas y abren el menú.
-- `lib/common.sh` — toda la lógica compartida (menús, `install_*`/`check_*`, ayudantes por distro). Se carga con `source`, nunca se ejecuta directo.
+- `lib/common.sh` — toda la lógica compartida (menús, `install_*`/`check_*`, ayudantes por distro, más los ayudantes compartidos `install_github_tarball`, `ensure_node_for`/`npm_install_global` e `install_flatpak_app`). Se carga con `source`, nunca se ejecuta directo.
 - `config_zsh/Fedora/.zshrc`, `config_zsh/Cachyos/.zshrc`, `config_ghostty/config` — payloads que el paso `zshrc` copia al home del usuario destino.
 - `Fedora.md` / `Cachyos.md` — notas manuales paso a paso; pueden ir por detrás de los scripts, así que los scripts mandan.
 

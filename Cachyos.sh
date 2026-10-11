@@ -49,6 +49,7 @@ register_tool spotify  "Spotify (Flatpak)"           install_spotify           c
 register_tool obsidian "Obsidian (Flatpak)"          install_obsidian          check_obsidian
 register_tool dank     "Dank Material Shell"         install_dank_shell        check_dank
 register_tool antigravity "Antigravity CLI"          install_antigravity       check_antigravity
+register_tool opencode "OpenCode"                    install_opencode          check_opencode
 register_tool configs  "Configs Niri"                install_configs           check_configs
 register_tool plugins  "Plugins Zsh"                 install_zsh_plugins       check_plugins
 register_tool zshrc    "Configuración .zshrc"        configure_zshrc           check_zshrc

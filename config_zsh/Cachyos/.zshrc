@@ -90,3 +90,8 @@ fi
 if [[ ! ":$PATH:" == *":$HOME/.local/bin:"* ]]; then
   export PATH="$HOME/.local/bin:$PATH"
 fi
+
+# Agrega ~/.opencode/bin al PATH (instalador oficial de OpenCode)
+if [[ ! ":$PATH:" == *":$HOME/.opencode/bin:"* ]]; then
+  export PATH="$HOME/.opencode/bin:$PATH"
+fi

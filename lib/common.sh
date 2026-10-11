@@ -651,68 +651,88 @@ enable_terra_repo() {
   fi
 }
 
+# Resuelve el sufijo de arquitectura de los releases de GitHub (x86_64/arm64).
+# Imprime el nombre y devuelve 1 si no hay binario oficial.
+github_release_arch() {
+  case "$(uname -m)" in
+  x86_64) printf '%s\n' "x86_64" ;;
+  aarch64 | arm64) printf '%s\n' "arm64" ;;
+  *)
+    error "Arquitectura sin binario oficial: $(uname -m)."
+    return 1
+    ;;
+  esac
+}
+
+# Resuelve el último tag de un repo GitHub vía la API. Imprime solo el tag;
+# devuelve 1 si no se pudo resolver (el llamador pone su propio mensaje).
+fetch_github_latest_tag() {
+  local repo="$1" tag
+  tag=$(curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" |
+    sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+  [ -n "$tag" ] || return 1
+  printf '%s\n' "$tag"
+}
+
+# Descarga un tarball de release + su checksums.txt, verifica sha256, extrae
+# el binario e instala en /usr/local/bin. No escribe RESULTS (lo hace el
+# llamador); imprime sus propios errores y limpia el temporal en cada salida.
+# Uso: install_github_tarball <repo> <tag> <tarball> <binario> [checksums=checksums.txt]
+install_github_tarball() {
+  local repo="$1" tag="$2" tarball="$3" binary="$4"
+  local checksums="${5:-checksums.txt}"
+  local base_url="https://github.com/${repo}/releases/download/${tag}"
+  local tmp want have
+  tmp=$(make_tempdir "/tmp/${binary}.XXXXXX") || {
+    error "No se pudo crear el directorio temporal."
+    return 1
+  }
+  if ! curl -fsSL -o "$tmp/$tarball" "$base_url/$tarball"; then
+    error "No se pudo descargar $base_url/$tarball"
+    rm -rf "$tmp"
+    return 1
+  fi
+  if ! curl -fsSL -o "$tmp/checksums.txt" "$base_url/$checksums"; then
+    error "No se pudo descargar $checksums; se aborta para no instalar sin verificar."
+    rm -rf "$tmp"
+    return 1
+  fi
+  want=$(awk -v f="$tarball" '$2 == f || $2 == "*"f { print $1 }' "$tmp/checksums.txt" | head -1)
+  have=$(sha256sum "$tmp/$tarball" | awk '{ print $1 }')
+  if [ -z "$want" ] || [ "$want" != "$have" ]; then
+    error "El sha256 del tarball no coincide con checksums.txt (esperado '${want:-<no encontrado>}', obtenido '$have')."
+    rm -rf "$tmp"
+    return 1
+  fi
+  if ! tar -xzf "$tmp/$tarball" -C "$tmp" "$binary"; then
+    error "No se pudo extraer el binario de $binary."
+    rm -rf "$tmp"
+    return 1
+  fi
+  if ! install -m 755 "$tmp/$binary" "/usr/local/bin/$binary"; then
+    error "No se pudo instalar /usr/local/bin/$binary."
+    rm -rf "$tmp"
+    return 1
+  fi
+  rm -rf "$tmp"
+}
+
 # Instala Lazygit desde el release oficial de GitHub como plan B cuando el
 # paquete de Terra no está disponible (Fedora recién salida sin build, repo
 # caído, llave que no se puede validar). lazygit no publica install.sh y los
 # assets llevan la versión en el nombre, así que hay que resolver el tag desde
 # la API. Verifica sha256 contra el checksums.txt del mismo release.
 install_lazygit_binary() {
-  local arch tag ver url tmp want have
-  case "$(uname -m)" in
-  x86_64) arch="x86_64" ;;
-  aarch64 | arm64) arch="arm64" ;;
-  *)
-    error "Arquitectura sin binario oficial: $(uname -m)."
-    return 1
-    ;;
-  esac
-
-  tag=$(curl -fsSL https://api.github.com/repos/jesseduffield/lazygit/releases/latest |
-    sed -n 's/.*"tag_name":[[:space:]]*"\(v[^"]*\)".*/\1/p' | head -1)
-  if [ -z "$tag" ]; then
+  local arch tag ver tarball
+  arch=$(github_release_arch) || return 1
+  tag=$(fetch_github_latest_tag "jesseduffield/lazygit") || {
     error "No se pudo resolver la última versión de Lazygit desde la API de GitHub."
     return 1
-  fi
+  }
   ver=${tag#v}
   info "Descargando Lazygit $ver ($arch) desde GitHub..."
-
-  tmp=$(make_tempdir /tmp/lazygit.XXXXXX) || {
-    error "No se pudo crear el directorio temporal."
-    return 1
-  }
-
-  url="https://github.com/jesseduffield/lazygit/releases/download/${tag}/lazygit_${ver}_linux_${arch}.tar.gz"
-  if ! curl -fsSL -o "$tmp/lazygit.tar.gz" "$url"; then
-    error "No se pudo descargar $url"
-    rm -rf "$tmp"
-    return 1
-  fi
-  if ! curl -fsSL -o "$tmp/checksums.txt" \
-    "https://github.com/jesseduffield/lazygit/releases/download/${tag}/checksums.txt"; then
-    error "No se pudo descargar checksums.txt; se aborta para no instalar sin verificar."
-    rm -rf "$tmp"
-    return 1
-  fi
-
-  want=$(awk -v f="lazygit_${ver}_linux_${arch}.tar.gz" '$2 == f || $2 == "*"f { print $1 }' "$tmp/checksums.txt" | head -1)
-  have=$(sha256sum "$tmp/lazygit.tar.gz" | awk '{ print $1 }')
-  if [ -z "$want" ] || [ "$want" != "$have" ]; then
-    error "El sha256 del tarball no coincide con checksums.txt (esperado '${want:-<no encontrado>}', obtenido '$have')."
-    rm -rf "$tmp"
-    return 1
-  fi
-
-  if ! tar -xzf "$tmp/lazygit.tar.gz" -C "$tmp" lazygit; then
-    error "No se pudo extraer el binario de Lazygit."
-    rm -rf "$tmp"
-    return 1
-  fi
-  if ! install -m 755 "$tmp/lazygit" /usr/local/bin/lazygit; then
-    error "No se pudo instalar /usr/local/bin/lazygit."
-    rm -rf "$tmp"
-    return 1
-  fi
-  rm -rf "$tmp"
+  tarball="lazygit_${ver}_linux_${arch}.tar.gz"
+  install_github_tarball "jesseduffield/lazygit" "$tag" "$tarball" "lazygit" || return 1
 }
 
 # 6. Instalar Lazygit
@@ -852,27 +872,50 @@ install_nodejs_npm() {
   fi
 }
 
+# Asegura Node.js/npm como dependencia de otro paso (gemini/repomix).
+# No escribe RESULTS: si falta el runtime lo instala como efecto secundario
+# (ver ensure_nodejs_npm) y el llamador decide su propio RESULTS.
+# Uso: ensure_node_for <etiqueta-paso> || { error ...; RESULTS[x]="Error"; return 1; }
+ensure_node_for() {
+  local label="$1"
+  if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+    warn "Node.js/npm no están instalados: se instalan como dependencia de $label."
+    ensure_nodejs_npm || return 1
+  fi
+}
+
+# Instala un paquete npm global y verifica que el binario quedó visible para
+# $REAL_USER (PATH o ~/.npm-global/bin). No escribe RESULTS; imprime sus
+# propios errores para no duplicar mensajes en el llamador.
+npm_install_global() {
+  local pkg="$1" bin="$2"
+  if ! run_as_user npm install -g "$pkg"; then
+    error "Error al instalar el paquete $pkg de forma global."
+    return 1
+  fi
+  if ! run_as_user bash -c "command -v $bin" >/dev/null 2>&1 && [ ! -x "$REAL_HOME/.npm-global/bin/$bin" ]; then
+    error "npm terminó pero '$bin' no se encontró para $REAL_USER."
+    return 1
+  fi
+}
+
 # 9. Gemini Copilot
 install_gemini_copilot() {
   header "Instalando Gemini Copilot (gemini-cli)"
   # Dependencia: si el paso 'node' fue omitido, se instala aquí como efecto
   # secundario. No se toca RESULTS[node] porque el usuario no aceptó ese paso.
-  if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
-    warn "Node.js/npm no están instalados: se instalan como dependencia de Gemini."
-    if ! ensure_nodejs_npm; then
-      error "Sin Node.js/npm no se puede instalar gemini-cli."
-      RESULTS[gemini]="Error"
-      return 1
-    fi
+  if ! ensure_node_for "Gemini"; then
+    error "Sin Node.js/npm no se puede instalar gemini-cli."
+    RESULTS[gemini]="Error"
+    return 1
   fi
 
   info "Instalando @google/gemini-cli globalmente..."
-  if run_as_user npm install -g @google/gemini-cli; then
+  if npm_install_global "@google/gemini-cli" "gemini"; then
     success "Gemini Copilot se ha instalado correctamente."
     warn "Nota: Recuerda reiniciar la terminal o ejecutar 'source ~/.zshrc' para poder usar el comando 'gemini'."
     RESULTS[gemini]="Éxito"
   else
-    error "Error al instalar el paquete @google/gemini-cli de forma global."
     RESULTS[gemini]="Error"
     return 1
   fi
@@ -905,28 +948,18 @@ install_repomix() {
   header "Instalando Repomix"
   # Dependencia: si el paso 'node' fue omitido, se instala aquí como efecto
   # secundario. No se toca RESULTS[node] porque el usuario no aceptó ese paso.
-  if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
-    warn "Node.js/npm no están instalados: se instalan como dependencia de Repomix."
-    if ! ensure_nodejs_npm; then
-      error "Sin Node.js/npm no se puede instalar repomix."
-      RESULTS[repomix]="Error"
-      return 1
-    fi
+  if ! ensure_node_for "Repomix"; then
+    error "Sin Node.js/npm no se puede instalar repomix."
+    RESULTS[repomix]="Error"
+    return 1
   fi
 
   info "Instalando repomix globalmente..."
-  if run_as_user npm install -g repomix; then
-    if run_as_user bash -c 'command -v repomix' >/dev/null 2>&1 || [ -x "$REAL_HOME/.npm-global/bin/repomix" ]; then
-      success "Repomix instalado correctamente."
-      warn "Nota: Recuerda reiniciar la terminal o ejecutar 'source ~/.zshrc' para poder usar el comando 'repomix'."
-      RESULTS[repomix]="Éxito"
-    else
-      error "npm terminó pero 'repomix' no se encontró para $REAL_USER."
-      RESULTS[repomix]="Error"
-      return 1
-    fi
+  if npm_install_global "repomix" "repomix"; then
+    success "Repomix instalado correctamente."
+    warn "Nota: Recuerda reiniciar la terminal o ejecutar 'source ~/.zshrc' para poder usar el comando 'repomix'."
+    RESULTS[repomix]="Éxito"
   else
-    error "Error al instalar el paquete repomix de forma global."
     RESULTS[repomix]="Error"
     return 1
   fi
@@ -935,69 +968,22 @@ install_repomix() {
 # 12. LazySSH
 install_lazyssh() {
   header "Instalando LazySSH"
-  local arch tag url tmp want have
-  case "$(uname -m)" in
-  x86_64) arch="x86_64" ;;
-  aarch64 | arm64) arch="arm64" ;;
-  *)
-    error "Arquitectura sin binario oficial: $(uname -m)."
-    RESULTS[lazyssh]="Error"
-    return 1
-    ;;
-  esac
-
-  tag=$(curl -fsSL https://api.github.com/repos/Adembc/lazyssh/releases/latest |
-    sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
-  if [ -z "$tag" ]; then
-    error "No se pudo resolver la última versión de LazySSH desde la API de GitHub."
-    RESULTS[lazyssh]="Error"
-    return 1
-  fi
-  info "Descargando LazySSH $tag ($arch) desde GitHub..."
-
-  tmp=$(make_tempdir /tmp/lazyssh.XXXXXX) || {
-    error "No se pudo crear el directorio temporal."
+  local arch tag tarball
+  arch=$(github_release_arch) || {
     RESULTS[lazyssh]="Error"
     return 1
   }
-
-  url="https://github.com/Adembc/lazyssh/releases/download/${tag}/lazyssh_Linux_${arch}.tar.gz"
-  if ! curl -fsSL -o "$tmp/lazyssh.tar.gz" "$url"; then
-    error "No se pudo descargar $url"
-    rm -rf "$tmp"
+  tag=$(fetch_github_latest_tag "Adembc/lazyssh") || {
+    error "No se pudo resolver la última versión de LazySSH desde la API de GitHub."
+    RESULTS[lazyssh]="Error"
+    return 1
+  }
+  info "Descargando LazySSH $tag ($arch) desde GitHub..."
+  tarball="lazyssh_Linux_${arch}.tar.gz"
+  if ! install_github_tarball "Adembc/lazyssh" "$tag" "$tarball" "lazyssh"; then
     RESULTS[lazyssh]="Error"
     return 1
   fi
-  if ! curl -fsSL -o "$tmp/checksums.txt" \
-    "https://github.com/Adembc/lazyssh/releases/download/${tag}/checksums.txt"; then
-    error "No se pudo descargar checksums.txt; se aborta para no instalar sin verificar."
-    rm -rf "$tmp"
-    RESULTS[lazyssh]="Error"
-    return 1
-  fi
-
-  want=$(awk -v f="lazyssh_Linux_${arch}.tar.gz" '$2 == f || $2 == "*"f { print $1 }' "$tmp/checksums.txt" | head -1)
-  have=$(sha256sum "$tmp/lazyssh.tar.gz" | awk '{ print $1 }')
-  if [ -z "$want" ] || [ "$want" != "$have" ]; then
-    error "El sha256 del tarball no coincide con checksums.txt (esperado '${want:-<no encontrado>}', obtenido '$have')."
-    rm -rf "$tmp"
-    RESULTS[lazyssh]="Error"
-    return 1
-  fi
-
-  if ! tar -xzf "$tmp/lazyssh.tar.gz" -C "$tmp" lazyssh; then
-    error "No se pudo extraer el binario de LazySSH."
-    rm -rf "$tmp"
-    RESULTS[lazyssh]="Error"
-    return 1
-  fi
-  if ! install -m 755 "$tmp/lazyssh" /usr/local/bin/lazyssh; then
-    error "No se pudo instalar /usr/local/bin/lazyssh."
-    rm -rf "$tmp"
-    RESULTS[lazyssh]="Error"
-    return 1
-  fi
-  rm -rf "$tmp"
 
   if ! command -v lazyssh >/dev/null 2>&1; then
     error "El instalador terminó pero 'lazyssh' no se encontró."
@@ -1083,32 +1069,31 @@ install_brave() {
   fi
 }
 
-# 10. Spotify
-install_spotify() {
-  header "Instalando Spotify (Flatpak --user)"
+# Instala una app Flatpak --user. Escribe RESULTS[$id]; el llamador es un
+# wrapper de una línea para no tocar el registro en los entrypoints.
+# Uso: install_flatpak_app <id> <flatpak-appid> <etiqueta>
+install_flatpak_app() {
+  local id="$1" appid="$2" label="$3"
+  header "Instalando $label (Flatpak --user)"
   ensure_flatpak
-  if run_as_user flatpak install --user -y flathub com.spotify.Client; then
-    success "Spotify instalado correctamente via Flatpak (--user)."
-    RESULTS[spotify]="Éxito"
+  if run_as_user flatpak install --user -y flathub "$appid"; then
+    success "$label instalado correctamente via Flatpak (--user)."
+    RESULTS["$id"]="Éxito"
   else
-    error "Error al instalar Spotify."
-    RESULTS[spotify]="Error"
+    error "Error al instalar $label."
+    RESULTS["$id"]="Error"
     return 1
   fi
 }
 
+# 10. Spotify
+install_spotify() {
+  install_flatpak_app "spotify" "com.spotify.Client" "Spotify"
+}
+
 # 11. Obsidian
 install_obsidian() {
-  header "Instalando Obsidian (Flatpak --user)"
-  ensure_flatpak
-  if run_as_user flatpak install --user -y flathub md.obsidian.Obsidian; then
-    success "Obsidian instalado correctamente via Flatpak (--user)."
-    RESULTS[obsidian]="Éxito"
-  else
-    error "Error al instalar Obsidian."
-    RESULTS[obsidian]="Error"
-    return 1
-  fi
+  install_flatpak_app "obsidian" "md.obsidian.Obsidian" "Obsidian"
 }
 
 # 12. Dank Shell
@@ -1427,15 +1412,29 @@ check_brave() {
     echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
 }
 
+# Test silencioso (sin salida) de app Flatpak --user: devuelve 0 si está.
+# No imprime nada porque check_* se captura vía $(...) en show_status_table.
+check_flatpak_app_installed() {
+  local appid="$1"
+  command -v flatpak >/dev/null 2>&1 &&
+    run_as_user flatpak list --columns=application 2>/dev/null | grep -q "$appid" 2>/dev/null
+}
+
 check_spotify() {
   # list como el usuario real: como root no se ven las apps --user.
-  command -v flatpak >/dev/null 2>&1 && run_as_user flatpak list --columns=application 2>/dev/null | grep -q "com.spotify.Client" 2>/dev/null &&
-    echo -e "${GREEN}Instalado (Flatpak)${NC}" || echo -e "${RED}No instalado${NC}"
+  if check_flatpak_app_installed "com.spotify.Client"; then
+    echo -e "${GREEN}Instalado (Flatpak)${NC}"
+  else
+    echo -e "${RED}No instalado${NC}"
+  fi
 }
 
 check_obsidian() {
-  command -v flatpak >/dev/null 2>&1 && run_as_user flatpak list --columns=application 2>/dev/null | grep -q "md.obsidian.Obsidian" 2>/dev/null &&
-    echo -e "${GREEN}Instalado (Flatpak)${NC}" || echo -e "${RED}No instalado${NC}"
+  if check_flatpak_app_installed "md.obsidian.Obsidian"; then
+    echo -e "${GREEN}Instalado (Flatpak)${NC}"
+  else
+    echo -e "${RED}No instalado${NC}"
+  fi
 }
 
 check_dank() {

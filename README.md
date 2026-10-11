@@ -4,7 +4,7 @@ This repository contains personal, interactive, menu-driven Bash automation scri
 
 ## Key Features & Tools Installed
 
-The scripts automate the setup of twenty-one (21) core system features and tools, listed in the exact order they appear in the menu and status table:
+The scripts automate the setup of twenty-two (22) core system features and tools, listed in the exact order they appear in the menu and status table:
 
 1. **System Upgrade**: Refreshes repositories and performs upgrades (`dnf upgrade --refresh -y` on Fedora, `pacman -Syu` on CachyOS).
 2. **Flatpak & Flathub**: Installs Flatpak if missing and registers the Flathub remote for your user (`flatpak remote-add --user --if-not-exists flathub`). Spotify/Obsidian reuse this step automatically (`ensure_flatpak`) and install `--user` too.
@@ -24,9 +24,10 @@ The scripts automate the setup of twenty-one (21) core system features and tools
 16. **Obsidian**: Knowledge base application deployed via Flatpak `--user` (`md.obsidian.Obsidian`).
 17. **Dank Material Shell**: Interactive install script (`dankinstall`) that asks for your preferred compositor (niri/hyprland) and terminal (ghostty/kitty/alacritty) before setting up the layout and theme engines. Runs as your user, never as root, with `-o pipefail`. Skipped when `dms` is already installed; installer logs live in `/tmp/dankinstall-*.log`. Must run **before** `configs` and `zshrc` (it creates the `dankcolors` Ghostty theme those steps ship).
 18. **Antigravity CLI**: Installs Google's Antigravity command-line tool as your user (`agy` lands in your `HOME`, verified in `PATH` or `~/.local/bin/agy`).
-19. **Niri Configuration Files**: Clones `https://github.com/fonta81/.BackNiriDank.git` into `~/.config/niri` atomically (a failed clone never touches your existing config) with a `.bak-<epoch>` backup. If a Niri config already exists (e.g. created by DMS), it asks for `[s/N]` confirmation first. The clone keeps its `.git` so you can `git pull` updates later.
-20. **Zsh Plugins**: Installs `zsh-autosuggestions` and `zsh-syntax-highlighting` from distro packages (`/usr/share/...` on Fedora, `/usr/share/zsh/plugins/...` on Arch) and creates a `<name>.plugin.zsh` bridge in `~/.oh-my-zsh/custom/plugins` that sources the system file (a plain symlink to the system directory never loads in OMZ). A bridge or clone this script did **not** generate — e.g. your own git clone of the upstream repo with its own `.plugin.zsh` — is detected and left in place rather than overwritten. A multiline `plugins=(` block is left untouched with a warning; note the next step overwrites `~/.zshrc` anyway.
-21. **Custom `.zshrc` & Ghostty**: Deploys a fully-configured Zsh profile with custom aliases and tools, plus the Ghostty terminal config into `~/.config/ghostty`. This step runs last because it overwrites `~/.zshrc`; the profile is distro-specific (`config_zsh/Fedora/.zshrc` or `config_zsh/Cachyos/.zshrc`), already lists both plugins, and adds `~/.local/bin` (`fd`, `agy`) and `~/.npm-global/bin` to `PATH`. Existing files are backed up (`.zshrc.bak.<date>` and `.bak-<epoch>` for Ghostty).
+19. **OpenCode**: Terminal-native AI coding agent via the official installer (`curl -fsSL https://opencode.ai/install | bash`, with `-o pipefail`), installed as your user into `~/.opencode/bin` so it is identical on both distros. The binary is verified in your `PATH` or `~/.opencode/bin/opencode`.
+20. **Niri Configuration Files**: Clones `https://github.com/fonta81/.BackNiriDank.git` into `~/.config/niri` atomically (a failed clone never touches your existing config) with a `.bak-<epoch>` backup. If a Niri config already exists (e.g. created by DMS), it asks for `[s/N]` confirmation first. The clone keeps its `.git` so you can `git pull` updates later.
+21. **Zsh Plugins**: Installs `zsh-autosuggestions` and `zsh-syntax-highlighting` from distro packages (`/usr/share/...` on Fedora, `/usr/share/zsh/plugins/...` on Arch) and creates a `<name>.plugin.zsh` bridge in `~/.oh-my-zsh/custom/plugins` that sources the system file (a plain symlink to the system directory never loads in OMZ). A bridge or clone this script did **not** generate — e.g. your own git clone of the upstream repo with its own `.plugin.zsh` — is detected and left in place rather than overwritten. A multiline `plugins=(` block is left untouched with a warning; note the next step overwrites `~/.zshrc` anyway.
+22. **Custom `.zshrc` & Ghostty**: Deploys a fully-configured Zsh profile with custom aliases and tools, plus the Ghostty terminal config into `~/.config/ghostty`. This step runs last because it overwrites `~/.zshrc`; the profile is distro-specific (`config_zsh/Fedora/.zshrc` or `config_zsh/Cachyos/.zshrc`), already lists both plugins, and adds `~/.local/bin` (`fd`, `agy`), `~/.npm-global/bin` and `~/.opencode/bin` to `PATH`. Existing files are backed up (`.zshrc.bak.<date>` and `.bak-<epoch>` for Ghostty).
 
 ---
 
@@ -53,7 +54,7 @@ Launch them from your normal user session — not from a root shell (`sudo -i`) 
 
 ### Execution Modes
 When running either script, a status table is shown first, then you can choose from:
-1. **Todo automático (All Automatic):** Sequentially executes all 21 configuration steps; the Dank Material Shell step pauses (interactive `dankinstall` prompts), and the Niri step asks for `[s/N]` confirmation if a config already exists.
+1. **Todo automático (All Automatic):** Sequentially executes all 22 configuration steps; the Dank Material Shell step pauses (interactive `dankinstall` prompts), and the Niri step asks for `[s/N]` confirmation if a config already exists.
 2. **Interactivo (Interactive Selection):** Prompts for `[s/N/a]` confirmation (`s` = yes, `a` = yes and install everything that remains without asking again) before executing each step. "Yes to all" does not affect the internal prompts: Niri still asks for `[s/N]` confirmation if a config already exists, and `dankinstall` is still interactive.
 3. **Estado (Check Status):** Displays a clean CLI status table identifying which tools are already present on the system.
 4. **Salir (Exit):** Clean exit.
@@ -73,7 +74,7 @@ Overwritten configs are never deleted silently: Niri, Neovim and Ghostty keep `.
 
 ## Repository Layout
 
-- `Fedora.sh`, `Cachyos.sh` — entrypoints only: they source `lib/common.sh`, ensure root/user detection, register the 21 tools, and open the menu.
+- `Fedora.sh`, `Cachyos.sh` — entrypoints only: they source `lib/common.sh`, ensure root/user detection, register the 22 tools, and open the menu.
 - `lib/common.sh` — all shared logic (menus, `install_*`/`check_*`, distro helpers, plus the shared `install_github_tarball`, `ensure_node_for`/`npm_install_global` and `install_flatpak_app` helpers). Sourced, never executed directly.
 - `config_zsh/Fedora/.zshrc`, `config_zsh/Cachyos/.zshrc`, `config_ghostty/config` — payloads copied into the target user's home by the `zshrc` step.
 - `Fedora.md` / `Cachyos.md` — manual step-by-step notes; they can lag the scripts, so the scripts take precedence.

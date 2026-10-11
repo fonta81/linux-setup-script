@@ -75,6 +75,7 @@ alias nz="nvim ~/.zshrc"
 
 # Fedora
 alias update="sudo dnf upgrade --refresh"
+alias brewup="brew update && brew upgrade && brew cleanup"
 
 # ==========================================
 # 6. INICIALIZACIÓN / STARTUP (initContent)
@@ -85,12 +86,6 @@ if command -v pokemon-colorscripts &> /dev/null; then
 fi
 
 
-# Agrega ~/.local/bin al PATH (fd, agy y otras herramientas de usuario)
-if [[ ! ":$PATH:" == *":$HOME/.local/bin:"* ]]; then
-  export PATH="$HOME/.local/bin:$PATH"
-fi
-
-# Agrega ~/.opencode/bin al PATH (instalador oficial de OpenCode)
-if [[ ! ":$PATH:" == *":$HOME/.opencode/bin:"* ]]; then
-  export PATH="$HOME/.opencode/bin:$PATH"
-fi
+# Added by Antigravity CLI installer
+export PATH="/home/mteo/.local/bin:$PATH"
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"

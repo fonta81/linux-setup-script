@@ -22,21 +22,20 @@ sh -c "$(curl -fsSL <https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/to
 source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
 source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 
-### yazi
+### Homebrew (yazi, lazygit, lazyssh, lavat)
 
-cd
-sudo pacman -S --noconfirm yazi
+# (como tu usuario, nunca root; el script además precrea /home/linuxbrew a tu
+#  nombre porque el instalador con sudo -n aborta si no existe)
+sudo pacman -S --needed base-devel procps-ng curl file git
+NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+brew install yazi lazygit lazyssh lavat
 
 ### nvim && lazyvim
 
 cd
 sudo pacman -S --noconfirm neovim git ripgrep fd
 git clone <https://github.com/LazyVim/starter> ~/.config/nvim
-
-### lazygit
-
-cd
-sudo pacman -S --noconfirm lazygit
 
 ### pokemonscripts(terminal)
 

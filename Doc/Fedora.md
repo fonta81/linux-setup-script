@@ -20,30 +20,22 @@ sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/too
 source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
 source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 
-### yazi
+### Homebrew (yazi, lazygit, lazyssh, lavat)
 
-cd
-sudo dnf copr enable -y lihaohong/yazi
-sudo dnf install -y yazi
+# (como tu usuario, nunca root; el script además precrea /home/linuxbrew a tu
+#  nombre porque el instalador con sudo -n aborta si no existe.
+#  Sustituye al COPR lihaohong/yazi, al repo Terra y al tarball de lazyssh.)
+sudo dnf group install -y development-tools
+sudo dnf install -y procps-ng curl file
+NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+brew install yazi lazygit lazyssh lavat
 
 ### nvim && lazyvim
 
 cd
 sudo dnf install -y neovim git ripgrep fd-find fzf gcc make unzip
 git clone https://github.com/LazyVim/starter ~/.config/nvim
-
-### lazygit
-
-cd
-# terra-gpg-keys va en la misma transacción: terra-release solo escribe
-# terra.repo (gpgcheck=1, gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-terra$releasever)
-# y la llave vive en terra-gpg-keys, que está dentro de terra.
-# repo_gpgcheck=0 solo para terra: apaga la firma de repomd.xml.asc, la del RPM
-# sigue verificándose.
-sudo dnf install -y --nogpgcheck --setopt=terra.repo_gpgcheck=0 \
-  --repofrompath "terra-fyralabs,https://repos.fyralabs.com/terra$releasever" \
-  terra-release terra-gpg-keys
-sudo dnf --setopt=terra.repo_gpgcheck=0 install -y lazygit
 
 ### pokemonscripts(terminal)
 

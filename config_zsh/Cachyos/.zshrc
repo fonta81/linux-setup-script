@@ -4,6 +4,9 @@
 # (En un sistema sin Home Manager, debes instalar manualmente los paquetes):
 # nix-env -iA nixpkgs.pokemon-colorscripts nixpkgs.yazi
 # O con el gestor de paquetes de tu distro (ej. sudo pacman -S yazi)
+# Las herramientas de Homebrew (yazi, lazygit, lazyssh, lavat) ya quedan
+# resueltas por el paso 'Homebrew' del script, que instala en
+# /home/linuxbrew/.linuxbrew y cuyo PATH se añade más abajo.
 
 
 # ==========================================
@@ -15,6 +18,12 @@ export VISUAL="nvim"
 # Agregar directorio global de NPM al PATH de forma segura
 if [[ ! ":$PATH:" == *":$HOME/.npm-global/bin:"* ]]; then
   export PATH="$HOME/.npm-global/bin:$PATH"
+fi
+
+# Homebrew (paso 'Homebrew' del script). Guardado: si brew no está instalado,
+# el shell arranca igual en vez de soltar un error de 'command not found'.
+if [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
+  eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 fi
 
 
@@ -75,6 +84,9 @@ alias nz="nvim ~/.zshrc"
 
 # CachyOs
 alias update="sudo pacman -Syu"
+
+# brew
+alias brewup="brew update && brew upgrade && brew cleanup"
 
 
 # ==========================================

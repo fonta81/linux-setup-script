@@ -370,19 +370,6 @@ install_package() {
   esac
 }
 
-# Habilitar repositorio en el gestor de paquetes (solo Fedora; fuera de
-# Fedora no hace nada y devuelve 0)
-enable_copr_or_aur() {
-  local repo="$1"
-  if [ "$DISTRO" = "fedora" ]; then
-    dnf copr enable -y "$repo"
-  else
-    # En Arch/CachyOS se usa AUR, pero para este caso usamos pacman
-    # Los repositorios típicos ya están configurados
-    return 0
-  fi
-}
-
 # Ejecutar comando diferente según distro
 run_on_distro() {
   local cmd_fedora="$1"
@@ -392,6 +379,64 @@ run_on_distro() {
   else
     eval "$cmd_cachyos"
   fi
+}
+
+# --- Homebrew (Linuxbrew) ---------------------------------------------------
+# Prefijo por defecto que usa el instalador oficial de brew.sh en Linux.
+BREW_PREFIX_DEFAULT="/home/linuxbrew/.linuxbrew"
+
+# Imprime el prefijo de Homebrew. Se le pregunta al propio brew y solo se cae al
+# default si todavía no responde, para no clavar una ruta fija si el usuario lo
+# instaló en otro prefijo (o si /home/linuxbrew no existe aún).
+brew_prefix() {
+  if [ -x "$BREW_PREFIX_DEFAULT/bin/brew" ]; then
+    printf '%s\n' "$BREW_PREFIX_DEFAULT"
+    return 0
+  fi
+  local brew_bin
+  brew_bin=$(run_as_user bash -c 'command -v brew' 2>/dev/null)
+  if [ -n "$brew_bin" ]; then
+    # <prefijo>/bin/brew -> <prefijo>
+    printf '%s\n' "$(dirname "$(dirname "$brew_bin")")"
+    return 0
+  fi
+  printf '%s\n' "$BREW_PREFIX_DEFAULT"
+}
+
+# Directorio de binarios de Homebrew. Vive FUERA del PATH de root: sin esto, una
+# herramienta instalada por brew sería invisible para las verificaciones y los
+# check_* se reportarían como 'No instalado' para siempre.
+brew_bin_dir() {
+  printf '%s\n' "$(brew_prefix)/bin"
+}
+
+brew_installed() {
+  [ -x "$(brew_bin_dir)/brew" ] ||
+    run_as_user bash -c 'command -v brew' >/dev/null 2>&1
+}
+
+# Instala una o más fórmulas como $REAL_USER. El binario de brew va por ruta
+# absoluta y el PATH se pasa explícito porque el de root no incluye el prefijo.
+# No escribe RESULTS: el llamador decide (mismo criterio que install_flatpak_app).
+brew_install() {
+  local brew_bin
+  brew_bin="$(brew_bin_dir)/brew"
+  if [ ! -x "$brew_bin" ]; then
+    error "Homebrew no está disponible en $brew_bin."
+    return 1
+  fi
+  run_as_user env PATH="$(brew_bin_dir):$PATH" "$brew_bin" install --formula "$@"
+}
+
+# Dice si un binario está disponible para el usuario real, venga de donde venga:
+# PATH de root, prefijo de Homebrew, ~/.local/bin o el PATH del usuario.
+# Uso: cmd_available lazygit || { error ...; RESULTS[x]="Error"; return 1; }
+cmd_available() {
+  local bin="$1"
+  command -v "$bin" >/dev/null 2>&1 && return 0
+  [ -x "$(brew_bin_dir)/$bin" ] && return 0
+  [ -x "$REAL_HOME/.local/bin/$bin" ] && return 0
+  run_as_user bash -c "command -v '$bin'" >/dev/null 2>&1
 }
 
 # --- Funciones de Instalación Unificadas ----------------------------------
@@ -407,6 +452,91 @@ install_update() {
     RESULTS[update]="Error"
     return 1
   fi
+}
+
+# Homebrew (Linuxbrew)
+# Añade 'eval "$(<prefijo>/bin/brew shellenv)"' a ~/.zshrc y ~/.bashrc de forma
+# idempotente. No se confía solo en lo que hace el instalador oficial: este elige
+# el rc file según $SHELL, que bajo run_as_user no es fiable, y el paso 'zshrc'
+# sobrescribe ~/.zshrc al final de todos modos.
+activate_brew() {
+  local line="eval \"\$($(brew_prefix)/bin/brew shellenv)\""
+  local rc
+  for rc in "$REAL_HOME/.zshrc" "$REAL_HOME/.bashrc"; do
+    [ -f "$rc" ] || run_as_user touch "$rc"
+    if run_as_user grep -qF 'brew shellenv' "$rc" 2>/dev/null; then
+      info "brew shellenv ya estaba en $rc."
+      continue
+    fi
+    if run_as_user bash -c "printf '%s\n' '$line' >> '$rc'"; then
+      success "brew shellenv agregado a $rc."
+    else
+      warn "No se pudo agregar brew shellenv a $rc. Agrégalo a mano."
+    fi
+  done
+}
+
+install_brew() {
+  header "Instalando Homebrew"
+
+  if brew_installed; then
+    warn "Homebrew ya está instalado en $(brew_prefix). Se omite la instalación."
+    RESULTS[brew]="Éxito (Ya existía)"
+    return 0
+  fi
+
+  # Herramientas de compilación que Homebrew exige en Linux
+  # (docs.brew.sh/Homebrew-on-Linux). No es fatal: brew puede seguir sin ellas.
+  info "Instalando las herramientas de compilación que Homebrew necesita..."
+  local deps_log="/tmp/linux-setup-brew-deps.log"
+  if ! run_on_distro \
+    "dnf group install -y development-tools && dnf install -y procps-ng curl file" \
+    "pacman -S --noconfirm --needed base-devel procps-ng curl file git" \
+    >"$deps_log" 2>&1; then
+    warn "No se pudieron instalar todas las dependencias de compilación de Homebrew."
+    warn "Detalle del fallo en $deps_log. Se intenta continuar de todos modos."
+  fi
+
+  # El instalador de brew.sh aborta con "Insufficient permissions to install
+  # Homebrew" cuando /home/linuxbrew no existe: en modo NONINTERACTIVE su sudo es
+  # 'sudo -n', que no puede pedir contraseña. Creando el directorio aquí como
+  # root y dejándolo del usuario real, no necesita sudo en ningún momento.
+  if ! install -d -o "$REAL_USER" -g "$(id -gn "$REAL_USER")" /home/linuxbrew; then
+    error "No se pudo crear /home/linuxbrew propiedad de $REAL_USER."
+    RESULTS[brew]="Error"
+    return 1
+  fi
+
+  info "Ejecutando el instalador oficial como $REAL_USER (la primera vez clona el repo de Homebrew)..."
+  # NUNCA como root: Homebrew se niega a correr como uid 0 (como dankinstall).
+  # -o pipefail: sin él, un curl fallido deja a bash sin entrada y devuelve 0.
+  if ! run_as_user env NONINTERACTIVE=1 bash -o pipefail -c \
+    'curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh | bash'; then
+    error "Error al instalar Homebrew."
+    RESULTS[brew]="Error"
+    return 1
+  fi
+
+  if ! brew_installed; then
+    error "El instalador terminó pero 'brew' no se encontró en $(brew_bin_dir)."
+    RESULTS[brew]="Error"
+    return 1
+  fi
+
+  activate_brew
+  success "Homebrew instalado en $(brew_prefix)."
+  RESULTS[brew]="Éxito"
+}
+
+# Asegura Homebrew como dependencia de otro paso (yazi/lazygit/lazyssh/lavat).
+# Igual que ensure_flatpak: si falta, se instala aquí como efecto secundario sin
+# tocar el resultado del paso que lo llamó.
+ensure_brew() {
+  if brew_installed; then
+    return 0
+  fi
+  info "Homebrew no está instalado: se instala como dependencia de este paso."
+  install_brew
 }
 
 # 2. Configurar Flatpak
@@ -496,35 +626,26 @@ install_zsh_ohmyzsh() {
   fi
 }
 
-# Detección compartida de Yazi: sirve para la verificación tras instalar y
-# para check_yazi. Se consulta como el usuario real, porque desde root un
-# 'command -v yazi' no ve un Yazi en ~/.local/bin (patrón dms_installed).
-yazi_installed() {
-  command -v yazi >/dev/null 2>&1 ||
-    run_as_user bash -c 'command -v yazi' >/dev/null 2>&1 ||
-    [ -x "$REAL_HOME/.local/bin/yazi" ]
-}
-
 # 4. Instalar Yazi
 install_yazi() {
   header "Instalando Yazi (File Manager de Terminal)"
-  if [ "$DISTRO" = "fedora" ]; then
-    # No es fatal y va en un 'if' propio: encadenarlo con '&&' hacia el error
-    # hacía que, si el COPR se habilitaba bien, install_package nunca corriera
-    # y el paso cayera en 'Éxito' sin instalar nada. Se omite si ya está activo.
-    if dnf copr list --enabled 2>/dev/null | grep -q "lihaohong/yazi"; then
-      info "El COPR lihaohong/yazi ya está habilitado."
-    elif ! enable_copr_or_aur "lihaohong/yazi"; then
-      warn "No se pudo habilitar el COPR lihaohong/yazi; se intenta con los repos base."
-    fi
+  # Dependencia: si el paso 'brew' fue omitido, se instala aquí como efecto
+  # secundario (con un aviso), sin tocar RESULTS[brew].
+  if ! ensure_brew; then
+    error "Sin Homebrew no se puede instalar Yazi."
+    RESULTS[yazi]="Error"
+    return 1
   fi
-  if ! install_package yazi; then
+
+  info "Instalando yazi con Homebrew..."
+  if ! brew_install yazi; then
     error "Error al instalar Yazi."
     RESULTS[yazi]="Error"
     return 1
   fi
-  # Verificación: nunca reportar Éxito sin el binario (patrón dank/antigravity)
-  if ! yazi_installed; then
+  # Verificación: nunca reportar Éxito sin el binario (patrón lavat/antigravity).
+  # cmd_available mira también el prefijo de brew, fuera del PATH de root.
+  if ! cmd_available yazi; then
     error "El instalador terminó pero 'yazi' no se encontró para $REAL_USER."
     RESULTS[yazi]="Error"
     return 1
@@ -583,205 +704,24 @@ install_neovim_lazyvim() {
   fi
 }
 
-# Devuelve el releasever de Fedora (44, 45, rawhide...) como texto plano.
-# NO usar 'rpm -E %releasever': %releasever es una macro de dnf, no de rpm, así
-# que rpm la devuelve sin expandir y el resultado es el literal '%releasever'.
-# VERSION_ID de /etc/os-release es lo mismo que usa dnf para $releasever.
-fedora_releasever() {
-  local v
-  v=$(sed -n 's/^VERSION_ID="\([^"]*\)".*/\1/p' /etc/os-release 2>/dev/null)
-  [ -n "$v" ] || v=$(sed -n 's/^VERSION_ID=\([^"]*\).*/\1/p' /etc/os-release 2>/dev/null)
-  printf '%s' "$v"
-}
-
-# Avisa si el reloj del sistema no está sincronizado. Terra firma el metadata
-# con una ventana de validez y un reloj atrasado hace que rpm-sequoia rechace la
-# firma por "signature is not alive / Not live until", aunque la firma sea
-# criptográficamente correcta. Solo informa: no aborta.
-warn_if_clock_unsynced() {
-  command -v timedatectl >/dev/null 2>&1 || return 0
-  local ntp
-  ntp=$(timedatectl show -p NTPSynchronized --value 2>/dev/null)
-  [ "$ntp" = "yes" ] && return 0
-  warn "El reloj del sistema no está sincronizado (NTPSynchronized=$ntp)."
-  warn "Terra verifica la firma de su metadata con este reloj: un reloj atrasado"
-  warn "la rechaza con 'signature is not alive'. Sincroniza con 'timedatectl set-ntp true'."
-}
-
-# Habilita el repositorio Terra en Fedora. Idempotente.
-# Id de repo desechable 'terra-fyralabs': --repofrompath AGREGA el repo, no
-# sobrescribe uno existente, y terra-release escribe /etc/yum.repos.d/terra.repo
-# con id 'terra'. Con el mismo id, dnf5 aborta con 'Id está presente más de una
-# vez en la configuración' en la segunda corrida.
-enable_terra_repo() {
-  local releasever
-  releasever=$(fedora_releasever)
-
-  # La llave de terra no viaja en terra-release (solo escribe terra.repo), sino
-  # en terra-gpg-keys, que vive dentro de terra: hay que instalarlo en la misma
-  # transacción --nogpgcheck que trae terra-release. Es lo que indica upstream
-  # (developer.fyralabs.com/terra/installing).
-  #
-  # repo_gpgcheck=0 apaga SOLO la verificación de la firma de repomd.xml.asc.
-  # La firma del RPM sigue verificándose contra
-  # gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-terra$releasever (gpgcheck=1 en
-  # terra.repo), así que la integridad del contenido que se instala se mantiene.
-  # Es la mitigación para los falsos rechazos de ventana de validez de rpm-sequoia.
-  #
-  # El glob '*' es obligatorio aquí, no un descuido: en la PRIMERA corrida el
-  # repo 'terra' todavía no existe (lo escribe terra-release en esta misma
-  # transacción), y dnf5 con '--setopt=terra.repo_gpgcheck=0' sobre un repo
-  # inexistente aborta con exit 2 ("No hay repositorios coincidentes para
-  # terra"). Con '*' aplica a todos los repos, que para esta transacción solo
-  # significa Terra (los repos base no traen metadata firmada de todas formas).
-  if ! dnf install -y --nogpgcheck \
-    --setopt='*.repo_gpgcheck=0' \
-    --repofrompath "terra-fyralabs,https://repos.fyralabs.com/terra\$releasever" \
-    terra-release terra-gpg-keys; then
-    error "Error al habilitar el repositorio Terra."
-    return 1
-  fi
-
-  # Reimportar la llave desde la fuente oficial evita depender de un keyring
-  # viejo en el rpmdb (generaciones anteriores de la llave de terra). No es
-  # fatal si falla: se usa la llave que terra-gpg-keys acaba de instalar.
-  if [ -n "$releasever" ]; then
-    rpm --import "https://repos.fyralabs.com/terra${releasever}/key.asc" 2>/dev/null ||
-      info "No se pudo reimportar la llave de Terra; se usará la local."
-  fi
-}
-
-# Resuelve el sufijo de arquitectura de los releases de GitHub (x86_64/arm64).
-# Imprime el nombre y devuelve 1 si no hay binario oficial.
-github_release_arch() {
-  case "$(uname -m)" in
-  x86_64) printf '%s\n' "x86_64" ;;
-  aarch64 | arm64) printf '%s\n' "arm64" ;;
-  *)
-    error "Arquitectura sin binario oficial: $(uname -m)."
-    return 1
-    ;;
-  esac
-}
-
-# Resuelve el último tag de un repo GitHub vía la API. Imprime solo el tag;
-# devuelve 1 si no se pudo resolver (el llamador pone su propio mensaje).
-fetch_github_latest_tag() {
-  local repo="$1" tag
-  tag=$(curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" |
-    sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
-  [ -n "$tag" ] || return 1
-  printf '%s\n' "$tag"
-}
-
-# Descarga un tarball de release + su checksums.txt, verifica sha256, extrae
-# el binario e instala en /usr/local/bin. No escribe RESULTS (lo hace el
-# llamador); imprime sus propios errores y limpia el temporal en cada salida.
-# Uso: install_github_tarball <repo> <tag> <tarball> <binario> [checksums=checksums.txt]
-install_github_tarball() {
-  local repo="$1" tag="$2" tarball="$3" binary="$4"
-  local checksums="${5:-checksums.txt}"
-  local base_url="https://github.com/${repo}/releases/download/${tag}"
-  local tmp want have
-  tmp=$(make_tempdir "/tmp/${binary}.XXXXXX") || {
-    error "No se pudo crear el directorio temporal."
-    return 1
-  }
-  if ! curl -fsSL -o "$tmp/$tarball" "$base_url/$tarball"; then
-    error "No se pudo descargar $base_url/$tarball"
-    rm -rf "$tmp"
-    return 1
-  fi
-  if ! curl -fsSL -o "$tmp/checksums.txt" "$base_url/$checksums"; then
-    error "No se pudo descargar $checksums; se aborta para no instalar sin verificar."
-    rm -rf "$tmp"
-    return 1
-  fi
-  want=$(awk -v f="$tarball" '$2 == f || $2 == "*"f { print $1 }' "$tmp/checksums.txt" | head -1)
-  have=$(sha256sum "$tmp/$tarball" | awk '{ print $1 }')
-  if [ -z "$want" ] || [ "$want" != "$have" ]; then
-    error "El sha256 del tarball no coincide con checksums.txt (esperado '${want:-<no encontrado>}', obtenido '$have')."
-    rm -rf "$tmp"
-    return 1
-  fi
-  if ! tar -xzf "$tmp/$tarball" -C "$tmp" "$binary"; then
-    error "No se pudo extraer el binario de $binary."
-    rm -rf "$tmp"
-    return 1
-  fi
-  if ! install -m 755 "$tmp/$binary" "/usr/local/bin/$binary"; then
-    error "No se pudo instalar /usr/local/bin/$binary."
-    rm -rf "$tmp"
-    return 1
-  fi
-  rm -rf "$tmp"
-}
-
-# Instala Lazygit desde el release oficial de GitHub como plan B cuando el
-# paquete de Terra no está disponible (Fedora recién salida sin build, repo
-# caído, llave que no se puede validar). lazygit no publica install.sh y los
-# assets llevan la versión en el nombre, así que hay que resolver el tag desde
-# la API. Verifica sha256 contra el checksums.txt del mismo release.
-install_lazygit_binary() {
-  local arch tag ver tarball
-  arch=$(github_release_arch) || return 1
-  tag=$(fetch_github_latest_tag "jesseduffield/lazygit") || {
-    error "No se pudo resolver la última versión de Lazygit desde la API de GitHub."
-    return 1
-  }
-  ver=${tag#v}
-  info "Descargando Lazygit $ver ($arch) desde GitHub..."
-  tarball="lazygit_${ver}_linux_${arch}.tar.gz"
-  install_github_tarball "jesseduffield/lazygit" "$tag" "$tarball" "lazygit" || return 1
-}
-
 # 6. Instalar Lazygit
 install_lazygit() {
   header "Instalando Lazygit"
-  if [ "$DISTRO" = "fedora" ]; then
-    warn_if_clock_unsynced
-
-    # Solo se re-habilita Terra si falta algo: el release, las llaves, el repo
-    # activo o el archivo de llave. Verificar solo el repo saltaría el
-    # 'dnf clean'/'--refresh' cuando terra-release quedó a medias.
-    if rpm -q terra-release terra-gpg-keys >/dev/null 2>&1 &&
-      [ -f "/etc/pki/rpm-gpg/RPM-GPG-KEY-terra$(fedora_releasever)" ] &&
-      dnf repolist --enabled 2>/dev/null | grep -qi "terra"; then
-      info "El repositorio Terra ya está habilitado."
-    else
-      info "Habilitando el repositorio Terra para Lazygit..."
-      if ! enable_terra_repo; then
-        RESULTS[lazygit]="Error"
-        return 1
-      fi
-    fi
-
-    # repo_gpgcheck=0 solo para terra (ver enable_terra_repo): la firma del RPM
-    # se sigue verificando, la del metadata no. Aquí sí se puede nombrar 'terra'
-    # explícitamente porque enable_terra_repo ya se memastikan de que terra.repo
-    # existe, y dnf5 aborta con exit 2 ante un --setopt de repo inexistente.
-    if ! dnf --setopt=terra.repo_gpgcheck=0 install -y lazygit; then
-      warn "La instalación desde Terra falló; reintentando con metadata limpia."
-      dnf clean metadata
-      if ! dnf --setopt=terra.repo_gpgcheck=0 --refresh install -y lazygit; then
-        warn "Terra no entregó Lazygit; se instalará el binario oficial de GitHub."
-        install_lazygit_binary || {
-          error "Error al instalar Lazygit desde Terra y desde el release oficial."
-          RESULTS[lazygit]="Error"
-          return 1
-        }
-      fi
-    fi
-  else
-    if ! install_package lazygit; then
-      error "Error al instalar Lazygit."
-      RESULTS[lazygit]="Error"
-      return 1
-    fi
+  if ! ensure_brew; then
+    error "Sin Homebrew no se puede instalar Lazygit."
+    RESULTS[lazygit]="Error"
+    return 1
   fi
-  # Verificación: nunca reportar Éxito sin el binario (patrón yazi/brave/antigravity)
-  if ! command -v lazygit >/dev/null 2>&1; then
-    error "El instalador terminó pero 'lazygit' no se encontró."
+
+  info "Instalando lazygit con Homebrew..."
+  if ! brew_install lazygit; then
+    error "Error al instalar Lazygit."
+    RESULTS[lazygit]="Error"
+    return 1
+  fi
+  # Verificación: nunca reportar Éxito sin el binario (patrón yazi/lavat/brave).
+  if ! cmd_available lazygit; then
+    error "El instalador terminó pero 'lazygit' no se encontró para $REAL_USER."
     RESULTS[lazygit]="Error"
     return 1
   fi
@@ -968,25 +908,21 @@ install_repomix() {
 # 12. LazySSH
 install_lazyssh() {
   header "Instalando LazySSH"
-  local arch tag tarball
-  arch=$(github_release_arch) || {
-    RESULTS[lazyssh]="Error"
-    return 1
-  }
-  tag=$(fetch_github_latest_tag "Adembc/lazyssh") || {
-    error "No se pudo resolver la última versión de LazySSH desde la API de GitHub."
-    RESULTS[lazyssh]="Error"
-    return 1
-  }
-  info "Descargando LazySSH $tag ($arch) desde GitHub..."
-  tarball="lazyssh_Linux_${arch}.tar.gz"
-  if ! install_github_tarball "Adembc/lazyssh" "$tag" "$tarball" "lazyssh"; then
+  if ! ensure_brew; then
+    error "Sin Homebrew no se puede instalar LazySSH."
     RESULTS[lazyssh]="Error"
     return 1
   fi
 
-  if ! command -v lazyssh >/dev/null 2>&1; then
-    error "El instalador terminó pero 'lazyssh' no se encontró."
+  info "Instalando lazyssh con Homebrew..."
+  if ! brew_install lazyssh; then
+    error "Error al instalar LazySSH."
+    RESULTS[lazyssh]="Error"
+    return 1
+  fi
+
+  if ! cmd_available lazyssh; then
+    error "El instalador terminó pero 'lazyssh' no se encontró para $REAL_USER."
     RESULTS[lazyssh]="Error"
     return 1
   fi
@@ -997,37 +933,26 @@ install_lazyssh() {
 # 13. Lavat
 install_lavat() {
   header "Instalando Lavat (lava lamp en la terminal)"
-  info "Instalando dependencias de compilación (gcc, make)..."
-  if ! install_package gcc make; then
-    error "Error al instalar gcc/make."
+  if ! ensure_brew; then
+    error "Sin Homebrew no se puede instalar Lavat."
     RESULTS[lavat]="Error"
     return 1
   fi
 
-  local tmp
-  tmp=$(make_tempdir /tmp/lavat.XXXXXX) || {
-    error "No se pudo crear el directorio temporal."
-    RESULTS[lavat]="Error"
-    return 1
-  }
-  info "Clonando repositorio..."
-  if ! run_as_user git clone https://github.com/AngelJumbo/lavat.git "$tmp/repo"; then
-    error "Error al clonar el repositorio de lavat."
-    rm -rf "$tmp"
+  info "Instalando lavat con Homebrew..."
+  if ! brew_install lavat; then
+    error "Error al instalar Lavat."
     RESULTS[lavat]="Error"
     return 1
   fi
-  # make install escribe en /usr/local/bin: necesita root.
-  if (cd "$tmp/repo" && make && make install); then
-    success "Lavat instalado correctamente."
-    RESULTS[lavat]="Éxito"
-  else
-    error "Error al compilar o instalar Lavat."
-    rm -rf "$tmp"
+
+  if ! cmd_available lavat; then
+    error "El instalador terminó pero 'lavat' no se encontró para $REAL_USER."
     RESULTS[lavat]="Error"
     return 1
   fi
-  rm -rf "$tmp"
+  success "Lavat instalado correctamente."
+  RESULTS[lavat]="Éxito"
 }
 
 # 9. Brave Browser
@@ -1355,6 +1280,12 @@ check_update() {
   echo -e "${BLUE}Bajo demanda${NC}"
 }
 
+check_brew() {
+  # Sin la ruta en el mensaje a propósito: status_w es 34 y el prefijo
+  # (/home/linuxbrew/.linuxbrew) desbordaría la caja.
+  brew_installed && echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
+}
+
 check_flatpak() {
   # remote-list como el usuario real (cubre remotos system + user).
   command -v flatpak >/dev/null 2>&1 && run_as_user flatpak remote-list 2>/dev/null | grep -q "flathub" 2>/dev/null &&
@@ -1372,7 +1303,8 @@ check_zsh() {
 }
 
 check_yazi() {
-  yazi_installed && echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
+  # cmd_available mira el prefijo de Homebrew, que no está en el PATH de root.
+  cmd_available yazi && echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
 }
 
 check_neovim() {
@@ -1386,7 +1318,7 @@ check_neovim() {
 }
 
 check_lazygit() {
-  command -v lazygit >/dev/null 2>&1 && echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
+  cmd_available lazygit && echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
 }
 
 check_pokemon() {
@@ -1420,13 +1352,11 @@ check_repomix() {
 }
 
 check_lazyssh() {
-  command -v lazyssh >/dev/null 2>&1 &&
-    echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
+  cmd_available lazyssh && echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
 }
 
 check_lavat() {
-  command -v lavat >/dev/null 2>&1 &&
-    echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
+  cmd_available lavat && echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
 }
 
 check_brave() {

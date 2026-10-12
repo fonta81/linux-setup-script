@@ -30,6 +30,7 @@ fi
 # Registro de herramientas: id | etiqueta | función instalar | función chequear
 # ------------------------------------------------------------------------------
 register_tool update   "Actualización de Sistema"    install_update            check_update
+register_tool brew    "Homebrew"                    install_brew              check_brew
 register_tool flatpak  "Repositorio Flathub"         install_flatpak           check_flatpak
 register_tool zsh      "Zsh & Oh My Zsh"             install_zsh_ohmyzsh       check_zsh
 register_tool yazi     "Yazi File Manager"           install_yazi              check_yazi

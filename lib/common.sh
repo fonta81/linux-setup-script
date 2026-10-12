@@ -385,22 +385,13 @@ run_on_distro() {
 # Prefijo por defecto que usa el instalador oficial de brew.sh en Linux.
 BREW_PREFIX_DEFAULT="/home/linuxbrew/.linuxbrew"
 
-# Imprime el prefijo de Homebrew. Se le pregunta al propio brew y solo se cae al
-# default si todavía no responde, para no clavar una ruta fija si el usuario lo
-# instaló en otro prefijo (o si /home/linuxbrew no existe aún).
+# Imprime el prefijo de Homebrew. Solo se soporta el prefijo de Linuxbrew: no se
+# intenta localizar brew con 'command -v brew' como usuario porque sudo aplica
+# secure_path y brew nunca aparecería en ese PATH (comprobado), así que esa
+# detección era código muerto. Para un prefijo distinto:
+#   BREW_PREFIX=/opt/homebrew ./Fedora.sh
 brew_prefix() {
-  if [ -x "$BREW_PREFIX_DEFAULT/bin/brew" ]; then
-    printf '%s\n' "$BREW_PREFIX_DEFAULT"
-    return 0
-  fi
-  local brew_bin
-  brew_bin=$(run_as_user bash -c 'command -v brew' 2>/dev/null)
-  if [ -n "$brew_bin" ]; then
-    # <prefijo>/bin/brew -> <prefijo>
-    printf '%s\n' "$(dirname "$(dirname "$brew_bin")")"
-    return 0
-  fi
-  printf '%s\n' "$BREW_PREFIX_DEFAULT"
+  printf '%s\n' "${BREW_PREFIX:-$BREW_PREFIX_DEFAULT}"
 }
 
 # Directorio de binarios de Homebrew. Vive FUERA del PATH de root: sin esto, una
@@ -410,9 +401,19 @@ brew_bin_dir() {
   printf '%s\n' "$(brew_prefix)/bin"
 }
 
+# Homebrew está instalado si su ejecutable existe en el prefijo. Con el prefijo
+# único soportado (ver brew_prefix) no hace falta una segunda búsqueda por PATH.
 brew_installed() {
-  [ -x "$(brew_bin_dir)/brew" ] ||
-    run_as_user bash -c 'command -v brew' >/dev/null 2>&1
+  [ -x "$(brew_bin_dir)/brew" ]
+}
+
+# El binario debe provenir de la fórmula que este paso acaba de instalar, no de
+# un binario viejo que ya estuviera en el sistema: /usr/bin/yazi de pacman, o el
+# /usr/local/bin/lavat que dejaba la versión anterior del script (make install)
+# satisfacen igual un 'command -v' y darían un falso éxito tras brew install.
+# Uso: brew_has_binary yazi || { error ...; RESULTS[x]="Error"; return 1; }
+brew_has_binary() {
+  [ -x "$(brew_bin_dir)/$1" ]
 }
 
 # Instala una o más fórmulas como $REAL_USER. El binario de brew va por ruta
@@ -430,6 +431,11 @@ brew_install() {
 
 # Dice si un binario está disponible para el usuario real, venga de donde venga:
 # PATH de root, prefijo de Homebrew, ~/.local/bin o el PATH del usuario.
+# Solo para los check_*: tras instalar una fórmula se usa brew_has_binary, que sí
+# distingue el binario de brew de uno viejo del sistema. Ojo con la última
+# cláusula: bajo 'sudo -u' el PATH es el secure_path, así que NO ve
+# ~/.npm-global/bin ni ~/.opencode/bin (las de ~/.local/bin y brew sí se
+# comprueban antes por ruta).
 # Uso: cmd_available lazygit || { error ...; RESULTS[x]="Error"; return 1; }
 cmd_available() {
   local bin="$1"
@@ -455,20 +461,27 @@ install_update() {
 }
 
 # Homebrew (Linuxbrew)
-# Añade 'eval "$(<prefijo>/bin/brew shellenv)"' a ~/.zshrc y ~/.bashrc de forma
-# idempotente. No se confía solo en lo que hace el instalador oficial: este elige
-# el rc file según $SHELL, que bajo run_as_user no es fiable, y el paso 'zshrc'
-# sobrescribe ~/.zshrc al final de todos modos.
+# Añade a ~/.zshrc y ~/.bashrc el bloque guardado que trae el config shipped
+# (config_zsh/<DISTRO>/.zshrc), de forma idempotente. No se confía solo en lo que
+# hace el instalador oficial: este no escribe en ningún rc file, solo imprime las
+# instrucciones eligiendo el rc según $SHELL, que bajo run_as_user no es fiable.
+# Se escribe el bloque con guarda (y no un 'eval' desnudo) para que el shell
+# siga arrancando si brew se desinstala. El paso 'zshrc' sobrescribe ~/.zshrc
+# al final de todos modos; esta línea cubre el caso en el que ese paso no corrió.
 activate_brew() {
-  local line="eval \"\$($(brew_prefix)/bin/brew shellenv)\""
+  local brew_bin="$(brew_bin_dir)/brew"
+  local eval_line="eval \"\$($brew_bin shellenv)\""
   local rc
   for rc in "$REAL_HOME/.zshrc" "$REAL_HOME/.bashrc"; do
     [ -f "$rc" ] || run_as_user touch "$rc"
-    if run_as_user grep -qF 'brew shellenv' "$rc" 2>/dev/null; then
+    # Se busca la línea exacta que se escribiría abajo: así el bloque guardado
+    # del config shipped cuenta como 'ya estaba', pero un 'brew shellenv' suelto
+    # (de otro prefijo, o del brewup de otro tutorial) no engaña la detección.
+    if run_as_user grep -qF "$eval_line" "$rc" 2>/dev/null; then
       info "brew shellenv ya estaba en $rc."
       continue
     fi
-    if run_as_user bash -c "printf '%s\n' '$line' >> '$rc'"; then
+    if run_as_user bash -c "printf '%s\n' 'if [ -x $brew_bin ]; then' '$eval_line' 'fi' >> '$rc'"; then
       success "brew shellenv agregado a $rc."
     else
       warn "No se pudo agregar brew shellenv a $rc. Agrégalo a mano."
@@ -476,12 +489,13 @@ activate_brew() {
   done
 }
 
-install_brew() {
+# Instala Homebrew como $REAL_USER. No escribe RESULTS: el llamador decide
+# (mismo criterio que ensure_nodejs_npm / install_flatpak_app).
+install_brew_impl() {
   header "Instalando Homebrew"
 
   if brew_installed; then
     warn "Homebrew ya está instalado en $(brew_prefix). Se omite la instalación."
-    RESULTS[brew]="Éxito (Ya existía)"
     return 0
   fi
 
@@ -503,7 +517,6 @@ install_brew() {
   # root y dejándolo del usuario real, no necesita sudo en ningún momento.
   if ! install -d -o "$REAL_USER" -g "$(id -gn "$REAL_USER")" /home/linuxbrew; then
     error "No se pudo crear /home/linuxbrew propiedad de $REAL_USER."
-    RESULTS[brew]="Error"
     return 1
   fi
 
@@ -513,30 +526,45 @@ install_brew() {
   if ! run_as_user env NONINTERACTIVE=1 bash -o pipefail -c \
     'curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh | bash'; then
     error "Error al instalar Homebrew."
-    RESULTS[brew]="Error"
     return 1
   fi
 
   if ! brew_installed; then
     error "El instalador terminó pero 'brew' no se encontró en $(brew_bin_dir)."
-    RESULTS[brew]="Error"
     return 1
   fi
 
   activate_brew
   success "Homebrew instalado en $(brew_prefix)."
-  RESULTS[brew]="Éxito"
+}
+
+install_brew() {
+  # El estado 'Ya existía' se decide aquí, no en la impl: si brew ya estaba, el
+  # paso lo omite igual, pero el resumen lo distingue de una instalación real.
+  local ya_existia=0
+  brew_installed && ya_existia=1
+
+  if ! install_brew_impl; then
+    RESULTS[brew]="Error"
+    return 1
+  fi
+  if [ "$ya_existia" -eq 1 ]; then
+    RESULTS[brew]="Éxito (Ya existía)"
+  else
+    RESULTS[brew]="Éxito"
+  fi
 }
 
 # Asegura Homebrew como dependencia de otro paso (yazi/lazygit/lazyssh/lavat).
-# Igual que ensure_flatpak: si falta, se instala aquí como efecto secundario sin
-# tocar el resultado del paso que lo llamó.
+# No escribe RESULTS: si el paso 'brew' fue omitido y esto lo instala como efecto
+# secundario, su fila queda como el usuario la dejó ('Omitido'/'No ejecutado'),
+# igual que ensure_node_for con Node.js.
 ensure_brew() {
   if brew_installed; then
     return 0
   fi
   info "Homebrew no está instalado: se instala como dependencia de este paso."
-  install_brew
+  install_brew_impl
 }
 
 # 2. Configurar Flatpak
@@ -644,9 +672,10 @@ install_yazi() {
     return 1
   fi
   # Verificación: nunca reportar Éxito sin el binario (patrón lavat/antigravity).
-  # cmd_available mira también el prefijo de brew, fuera del PATH de root.
-  if ! cmd_available yazi; then
-    error "El instalador terminó pero 'yazi' no se encontró para $REAL_USER."
+  # brew_has_binary mira el prefijo de brew, fuera del PATH de root, y a
+  # diferencia de cmd_available no acepta un yazi viejo de pacman como válido.
+  if ! brew_has_binary yazi; then
+    error "El instalador terminó pero 'yazi' no se encontró en $(brew_bin_dir)."
     RESULTS[yazi]="Error"
     return 1
   fi
@@ -720,8 +749,10 @@ install_lazygit() {
     return 1
   fi
   # Verificación: nunca reportar Éxito sin el binario (patrón yazi/lavat/brave).
-  if ! cmd_available lazygit; then
-    error "El instalador terminó pero 'lazygit' no se encontró para $REAL_USER."
+  # brew_has_binary, no cmd_available: un lazygit de un repo de distro previo no
+  # cuenta como el de Homebrew.
+  if ! brew_has_binary lazygit; then
+    error "El instalador terminó pero 'lazygit' no se encontró en $(brew_bin_dir)."
     RESULTS[lazygit]="Error"
     return 1
   fi
@@ -921,8 +952,8 @@ install_lazyssh() {
     return 1
   fi
 
-  if ! cmd_available lazyssh; then
-    error "El instalador terminó pero 'lazyssh' no se encontró para $REAL_USER."
+  if ! brew_has_binary lazyssh; then
+    error "El instalador terminó pero 'lazyssh' no se encontró en $(brew_bin_dir)."
     RESULTS[lazyssh]="Error"
     return 1
   fi
@@ -946,8 +977,8 @@ install_lavat() {
     return 1
   fi
 
-  if ! cmd_available lavat; then
-    error "El instalador terminó pero 'lavat' no se encontró para $REAL_USER."
+  if ! brew_has_binary lavat; then
+    error "El instalador terminó pero 'lavat' no se encontró en $(brew_bin_dir)."
     RESULTS[lavat]="Error"
     return 1
   fi
@@ -1303,7 +1334,9 @@ check_zsh() {
 }
 
 check_yazi() {
-  # cmd_available mira el prefijo de Homebrew, que no está en el PATH de root.
+  # 'Instalado' aquí significa 'la herramienta está disponible para el usuario',
+  # venga de Homebrew, del PATH del sistema o de ~/.local/bin; para exigir la
+  # fórmula de brew (verificación tras instalar) está brew_has_binary.
   cmd_available yazi && echo -e "${GREEN}Instalado${NC}" || echo -e "${RED}No instalado${NC}"
 }
 

@@ -79,6 +79,9 @@ alias brewup="brew update && brew upgrade && brew cleanup"
 
 #Docker
 alias dk="docker"
+alias dkr="docker run"
+alias dkb="docker build"
+alias dkup="docker compose up"
 
 # ==========================================
 # 6. INICIALIZACIÓN / STARTUP (initContent)

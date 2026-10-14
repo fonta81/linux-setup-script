@@ -82,6 +82,7 @@ alias dk="docker"
 alias dkr="docker run"
 alias dkb="docker build"
 alias dkup="docker compose up"
+alias dkclean="docker system prune -a"
 
 # ==========================================
 # 6. INICIALIZACIÓN / STARTUP (initContent)

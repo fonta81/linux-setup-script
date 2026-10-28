@@ -60,6 +60,7 @@ alias cc="clear && pokemon-colorscripts -r --no-title"
 alias y="yazi"
 alias gg="lazygit"
 alias n="nvim"
+alias nn="gio open ."
 
 # pokemon
 alias pk="pokemon-colorscripts -r --no-title"

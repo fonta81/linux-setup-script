@@ -55,9 +55,9 @@ El resumen muestra `Éxito`, `Éxito (Ya existía)`, `Error`, `Omitido` o `No ej
 
 ## Repositorio y verificación segura
 
-- `Fedora.sh` y `Cachyos.sh` son puntos de entrada; la lógica compartida está en `lib/common.sh`.
+- `Fedora.sh` y `Cachyos.sh` son puntos de entrada; `lib/common.sh` carga las funciones compartidas desde `lib/core/` y una implementación por herramienta desde `lib/tools/`.
 - `config_zsh/` y `config_ghostty/` contienen los perfiles desplegados. `Doc/` contiene instrucciones antiguas; prevalecen los scripts.
-- Comprobación de sintaxis: `bash -n Fedora.sh Cachyos.sh lib/common.sh config_zsh/Fedora/.zshrc config_zsh/Cachyos/.zshrc`
+- Comprobación de sintaxis: `bash -n Fedora.sh Cachyos.sh lib/common.sh lib/core/*.sh lib/tools/*.sh config_zsh/Fedora/.zshrc config_zsh/Cachyos/.zshrc`
 - **No ejecutes los instaladores para probar cambios:** modifican el sistema, ejecutan `chsh` y sobrescriben archivos de configuración. No hay pruebas automatizadas ni linters.
 
 ---

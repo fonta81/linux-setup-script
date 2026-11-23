@@ -55,9 +55,9 @@ The summary reports `Éxito`, `Éxito (Ya existía)`, `Error`, `Omitido` or `No 
 
 ## Repository and safe verification
 
-- `Fedora.sh` and `Cachyos.sh` are entrypoints; shared logic is in `lib/common.sh`.
+- `Fedora.sh` and `Cachyos.sh` are entrypoints; `lib/common.sh` loads shared helpers from `lib/core/` and one implementation per tool from `lib/tools/`.
 - `config_zsh/` and `config_ghostty/` contain deployed profiles. `Doc/` contains legacy runbooks; the scripts take precedence.
-- Syntax check: `bash -n Fedora.sh Cachyos.sh lib/common.sh config_zsh/Fedora/.zshrc config_zsh/Cachyos/.zshrc`
+- Syntax check: `bash -n Fedora.sh Cachyos.sh lib/common.sh lib/core/*.sh lib/tools/*.sh config_zsh/Fedora/.zshrc config_zsh/Cachyos/.zshrc`
 - **Do not run the installers to test changes:** they modify the system, run `chsh` and overwrite configuration files. No automated tests or linters are provided.
 
 ---

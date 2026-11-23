@@ -61,6 +61,7 @@ alias y="yazi"
 alias gg="lazygit"
 alias n="nvim"
 alias nn="gio open ."
+alias co="code ."
 
 # pokemon
 alias pk="pokemon-colorscripts -r --no-title"

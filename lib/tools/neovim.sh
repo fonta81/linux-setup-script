@@ -18,11 +18,6 @@ install_neovim_lazyvim() {
   fi
 
   if [ "$DISTRO" = "fedora" ]; then
-    # El paquete Fedora 'fd-find' ya provee el binario 'fd' (el nombre
-    # 'fdfind' es propio de Debian); el enlace solo hace falta si aparece
-    # 'fdfind' sin que haya un 'fd' visible para el usuario real.
-    # El enlace vive en su ~/.local/bin (que el .zshrc añade al PATH al final,
-    # así que solo se verifica el archivo, no 'command -v', en esta sesión).
     if [ ! -e "$REAL_HOME/.local/bin/fd" ] && ! run_as_user bash -c 'command -v fd' >/dev/null 2>&1; then
       local fdfind_path
       fdfind_path=$(run_as_user bash -c 'command -v fdfind' 2>/dev/null)

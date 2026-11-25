@@ -5,13 +5,19 @@
 # 5. Neovim y LazyVim
 install_neovim_lazyvim() {
   header "Instalando Neovim, LazyVim y Dependencias"
+  local fd_package="fd"
   if [ "$DISTRO" = "fedora" ]; then
-    info "Instalando Neovim, git, ripgrep, fd-find y dependencias de LazyVim (fzf, gcc, make, unzip)..."
-    if ! install_package neovim git ripgrep fd-find fzf gcc make unzip; then
-      error "Error al instalar Neovim o sus dependencias básicas."
-      RESULTS[neovim]="Error"
-      return 1
-    fi
+    fd_package="fd-find"
+  fi
+
+  info "Instalando Neovim, git, ripgrep, $fd_package y dependencias de LazyVim (fzf, gcc, make, unzip)..."
+  if ! install_package neovim git ripgrep "$fd_package" fzf gcc make unzip; then
+    error "Error al instalar Neovim o sus dependencias básicas."
+    RESULTS[neovim]="Error"
+    return 1
+  fi
+
+  if [ "$DISTRO" = "fedora" ]; then
     # El paquete Fedora 'fd-find' ya provee el binario 'fd' (el nombre
     # 'fdfind' es propio de Debian); el enlace solo hace falta si aparece
     # 'fdfind' sin que haya un 'fd' visible para el usuario real.
@@ -27,17 +33,6 @@ install_neovim_lazyvim() {
           info "Estará en el PATH tras aplicar el paso 'Configuración .zshrc' y reabrir la terminal."
         fi
       fi
-    fi
-  else
-    info "Instalando Neovim, git, ripgrep, fd y dependencias de LazyVim (fzf, gcc, make, unzip)..."
-    # En Arch/CachyOS los paquetes son 'ripgrep' y 'fd' (binarios rg y fd),
-    # que necesita LazyVim/telescope. Sin ellos el paso parecía correcto pero
-    # el editor fallaba al usar la búsqueda de archivos. gcc/make/unzip/fzf
-    # los exigen treesitter y otros plugins (igual que en Fedora).
-    if ! install_package neovim git ripgrep fd fzf gcc make unzip; then
-      error "Error al instalar Neovim o sus dependencias básicas."
-      RESULTS[neovim]="Error"
-      return 1
     fi
   fi
 

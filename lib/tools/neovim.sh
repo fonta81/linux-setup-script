@@ -3,6 +3,20 @@
 
 
 # 5. Neovim y LazyVim
+# ------------------------------------------------------------------------------
+# install_neovim_lazyvim
+# Installs Neovim and the runtime dependencies LazyVim needs (git, ripgrep, fd,
+# fzf, gcc, make, unzip), then deploys the LazyVim starter template as
+# $REAL_HOME/.config/nvim.
+#
+# Notes:
+#   - The fd package is named `fd-find` on Fedora and `fd` on CachyOS; both
+#     provide the `fd` binary that telescope uses.
+#   - fzf, gcc, make and unzip are required by treesitter and other plugins.
+#   - The config is deployed atomically by deploy_clone, keeping its .git so the
+#     resulting directory can be updated with `git pull` later.
+#   - Sets RESULTS[neovim] to "Éxito" or "Error" and returns 1 on failure.
+# ------------------------------------------------------------------------------
 install_neovim_lazyvim() {
   header "Instalando Neovim, LazyVim y Dependencias"
   local fd_package="fd"
@@ -43,6 +57,12 @@ install_neovim_lazyvim() {
 }
 
 
+# ------------------------------------------------------------------------------
+# check_neovim
+# Prints the Neovim status shown in the status table: installed with LazyVim
+# (nvim on PATH and the nvim config directory present), Neovim alone, or not
+# installed. Read-only: it does not touch RESULTS.
+# ------------------------------------------------------------------------------
 check_neovim() {
   if command -v nvim >/dev/null 2>&1 && [ -d "$REAL_HOME/.config/nvim" ]; then
     echo -e "${GREEN}Instalado (con LazyVim)${NC}"
